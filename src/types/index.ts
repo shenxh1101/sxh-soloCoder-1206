@@ -13,10 +13,35 @@ export type PracticeMode =
   | 'custom'
   | 'wrongWords';
 
+export type WrongSort = 'count' | 'recent' | 'mode';
+
 export interface PracticeConfig {
   mode: PracticeMode;
   customChars: string[];
   label: string;
+  wrongSort?: WrongSort;
+  wrongLimit?: number;
+  goal?: PracticeGoal | null;
+}
+
+export type GoalType = 'duration' | 'correctCount' | 'accuracy';
+
+export interface PracticeGoal {
+  type: GoalType;
+  value: number;
+}
+
+export interface GoalResult {
+  reached: boolean;
+  type: GoalType;
+  target: number;
+  actual: number;
+}
+
+export interface WrongReviewSummary {
+  reviewed: string[];
+  mastered: string[];
+  stillWrong: { text: string; count: number }[];
 }
 
 export interface FallingItem {

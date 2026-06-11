@@ -197,6 +197,37 @@ export function addWrongRecords(
   return trimmed;
 }
 
+export function applyWrongReview(
+  mastered: string[],
+  stillWrong: { text: string; count: number }[]
+): WrongRecord[] {
+  const all = getWrongRecords();
+  const now = Date.now();
+
+  for (const t of mastered) {
+    const idx = all.findIndex(r => r.text === t);
+    if (idx >= 0) {
+      all[idx].count -= 1;
+      if (all[idx].count <= 0) {
+        all.splice(idx, 1);
+      }
+    }
+  }
+
+  for (const w of stillWrong) {
+    const idx = all.findIndex(r => r.text === w.text);
+    if (idx >= 0) {
+      all[idx].count += w.count;
+      all[idx].lastSeen = now;
+    }
+  }
+
+  const sorted = all.sort((a, b) => b.count - a.count || b.lastSeen - a.lastSeen);
+  const trimmed = sorted.slice(0, GAME_CONFIG.MAX_WRONG_RECORDS);
+  safeSet(STORAGE_KEYS.WRONG_RECORDS, trimmed);
+  return trimmed;
+}
+
 export function clearWrongRecords(): void {
   localStorage.removeItem(STORAGE_KEYS.WRONG_RECORDS);
 }

@@ -11,6 +11,8 @@ import type {
   PracticeConfig,
   PracticeMode,
   WrongRecord as WrongRecordType,
+  WrongReviewSummary,
+  GoalResult,
 } from '@/types';
 
 let itemIdCounter = 0;
@@ -65,6 +67,10 @@ interface GameState extends GameActions {
   activeKey: string | null;
   floatingScores: FloatingScore[];
   screenFlash: { type: 'milestone' | 'error' | null; time: number };
+  sessionInitialWrongWords: string[];
+  sessionCorrectWords: Set<string>;
+  wrongReviewSummary: WrongReviewSummary | null;
+  goalResult: GoalResult | null;
 }
 
 const initialState: Omit<GameState, keyof GameActions> = {
@@ -88,6 +94,10 @@ const initialState: Omit<GameState, keyof GameActions> = {
   activeKey: null,
   floatingScores: [],
   screenFlash: { type: null, time: 0 },
+  sessionInitialWrongWords: [],
+  sessionCorrectWords: new Set<string>(),
+  wrongReviewSummary: null,
+  goalResult: null,
 };
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -98,12 +108,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     stats.refresh();
     const prevDifficulty = get().difficulty;
     const prevConfig = get().practiceConfig;
+    const wordStore = useWordStore.getState();
+    const initialWords = pickWordsForPractice(
+      prevConfig,
+      prevConfig.mode === 'digitRow' ? 'digits' : prevDifficulty,
+      wordStore.library,
+      stats.wrongRecords
+    );
     set({
       ...initialState,
       difficulty: prevDifficulty,
       practiceConfig: prevConfig,
       status: 'playing',
       startTime: performance.now(),
+      sessionInitialWrongWords: prevConfig.mode === 'wrongWords' ? [...new Set(initialWords)] : [],
     });
   },
 
@@ -151,11 +169,60 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (duration > 0 || s.correctCount > 0 || s.wrongCount > 0) {
       useStatsStore.getState().recordSession(duration, s.correctCount, s.wrongCount, s.practiceConfig.mode);
     }
-    if (s.wrongDetails.length > 0) {
+
+    // --- 错题专项练习小结 + 更新错题次数 ---
+    let wrongReview: WrongReviewSummary | null = null;
+    if (s.practiceConfig.mode === 'wrongWords' && s.sessionInitialWrongWords.length > 0) {
+      const initialSet = new Set(s.sessionInitialWrongWords);
+      const stillWrongMap = new Map<string, number>();
+      for (const wd of s.wrongDetails) {
+        if (initialSet.has(wd.text)) {
+          stillWrongMap.set(wd.text, wd.count);
+        }
+      }
+      const stillWrongArr = Array.from(stillWrongMap.entries())
+        .map(([text, count]) => ({ text, count }))
+        .sort((a, b) => b.count - a.count);
+
+      const masteredArr = s.sessionInitialWrongWords.filter(
+        w => !stillWrongMap.has(w) && s.sessionCorrectWords.has(w)
+      );
+
+      wrongReview = {
+        reviewed: s.sessionInitialWrongWords,
+        mastered: masteredArr,
+        stillWrong: stillWrongArr,
+      };
+
+      // 更新错题：掌握了的-1，错了的+1
+      useStatsStore.getState().applyWrongReview(masteredArr, stillWrongArr);
+    } else if (s.wrongDetails.length > 0) {
       useStatsStore.getState().addWrongWords(
         s.wrongDetails.map(w => ({ text: w.text, count: w.count, mode: s.practiceConfig.mode }))
       );
     }
+
+    // --- 目标达成检测 ---
+    let goalResult: GoalResult | null = null;
+    const goal = s.practiceConfig.goal;
+    if (goal) {
+      let actual = 0;
+      if (goal.type === 'duration') {
+        actual = duration;
+      } else if (goal.type === 'correctCount') {
+        actual = s.correctCount;
+      } else if (goal.type === 'accuracy') {
+        const denom = s.correctCount + s.wrongCount;
+        actual = denom > 0 ? Math.round((s.correctCount / denom) * 100) : 0;
+      }
+      goalResult = {
+        reached: actual >= goal.value,
+        type: goal.type,
+        target: goal.value,
+        actual,
+      };
+    }
+
     setLastPracticeConfig(s.practiceConfig);
 
     set({
@@ -165,6 +232,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       sessionDuration: duration,
       totalPausedTime: pausedDelta,
       pausedTime: 0,
+      wrongReviewSummary: wrongReview,
+      goalResult,
     });
   },
 
@@ -181,10 +250,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setPracticeMode: (mode: PracticeMode, customChars: string[] = []) => {
     if (get().status === 'playing' || get().status === 'paused') return;
+    const prevCfg = get().practiceConfig;
     const cfg: PracticeConfig = {
       mode,
       customChars,
       label: getModeLabel(mode),
+      goal: prevCfg.goal ?? null,
+      wrongSort: prevCfg.wrongSort ?? 'count',
+      wrongLimit: prevCfg.wrongLimit ?? 50,
     };
     set({ practiceConfig: cfg });
     setLastPracticeConfig(cfg);
@@ -324,6 +397,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       .filter(i => i.id !== target.id)
       .concat(isWordComplete ? [] : [{ ...target, typed: newTyped }]);
 
+    const nextCorrectWords = isWordComplete ? new Set(s.sessionCorrectWords).add(target.text) : s.sessionCorrectWords;
+
     set({
       fallingItems: remaining,
       score: s.score + scoreGain,
@@ -334,6 +409,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       screenFlash: reachedMilestone
         ? { type: 'milestone', time: performance.now() }
         : s.screenFlash,
+      sessionCorrectWords: nextCorrectWords,
     });
 
     if (newMaxCombo > useStatsStore.getState().highestCombo) {

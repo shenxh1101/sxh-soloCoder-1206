@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Modal } from './Modal';
 import { LineChart } from './LineChart';
 import { useStatsStore } from '@/stores/useStatsStore';
@@ -28,23 +28,30 @@ interface Props {
 type Range = 7 | 30;
 type ViewMode = 'duration' | 'accuracy' | 'both';
 type TabMode = 'overview' | 'wrongWords' | 'byMode';
+type WrongSortKey = 'count' | 'recent' | 'currentMode';
 
 export function StatsPanel({ open, onClose, onStartPractice }: Props) {
   const [range, setRange] = useState<Range>(7);
   const [viewMode, setViewMode] = useState<ViewMode>('both');
   const [tab, setTab] = useState<TabMode>('overview');
+  const [wrongSort, setWrongSort] = useState<WrongSortKey>('count');
+  const [wrongLimit, setWrongLimit] = useState<number>(30);
   const refresh = useStatsStore(s => s.refresh);
   const getLastDays = useStatsStore(s => s.getLastDays);
   const highestCombo = useStatsStore(s => s.highestCombo);
   const wrongRecords = useStatsStore(s => s.wrongRecords);
   const clearWrongRecords = useStatsStore(s => s.clearWrongRecords);
+  const setPracticeConfig = useGameStore(s => s.setPracticeConfig);
 
   const status = useGameStore(s => s.status);
   const setPracticeMode = useGameStore(s => s.setPracticeMode);
+  const practiceMode = useGameStore(s => s.practiceConfig.mode);
 
-  if (open) refresh();
+  useEffect(() => {
+    if (open) refresh();
+  }, [open, refresh]);
 
-  const rawData = useMemo(() => getLastDays(range), [getLastDays, range, open]);
+  const rawData = useMemo(() => getLastDays(range), [getLastDays, range]);
 
   const chartData = useMemo(() => rawData.map(d => {
     const md = d.date.slice(5);
@@ -75,10 +82,33 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
     };
   }, [rawData]);
 
-  const topWrong = useMemo(
-    () => [...wrongRecords].sort((a, b) => b.count - a.count).slice(0, 15),
-    [wrongRecords]
-  );
+  const topWrong = useMemo(() => {
+    let pool = [...wrongRecords];
+    if (wrongSort === 'count') {
+      pool.sort((a, b) => b.count - a.count);
+    } else if (wrongSort === 'recent') {
+      pool.sort((a, b) => b.lastSeen - a.lastSeen);
+    } else if (wrongSort === 'currentMode') {
+      const filtered = pool.filter(r => r.mode === practiceMode);
+      pool = filtered.length > 0 ? filtered : pool;
+      pool.sort((a, b) => b.count - a.count);
+    }
+    return pool.slice(0, 15);
+  }, [wrongRecords, wrongSort, practiceMode]);
+
+  const sortedWrongRecords = useMemo(() => {
+    let pool = [...wrongRecords];
+    if (wrongSort === 'count') {
+      pool.sort((a, b) => b.count - a.count);
+    } else if (wrongSort === 'recent') {
+      pool.sort((a, b) => b.lastSeen - a.lastSeen);
+    } else if (wrongSort === 'currentMode') {
+      const filtered = pool.filter(r => r.mode === practiceMode);
+      pool = filtered.length > 0 ? filtered : pool;
+      pool.sort((a, b) => b.count - a.count);
+    }
+    return pool;
+  }, [wrongRecords, wrongSort, practiceMode]);
 
   const modeStats = useMemo(() => {
     const map = new Map<string, { duration: number; correct: number; wrong: number; sessions: number }>();
@@ -123,7 +153,20 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
       alert('请先结束当前游戏');
       return;
     }
-    setPracticeMode('wrongWords', []);
+    const sortMap: Record<WrongSortKey, 'count' | 'recent' | 'mode'> = {
+      count: 'count',
+      recent: 'recent',
+      currentMode: 'mode',
+    };
+    const cfg: any = {
+      mode: 'wrongWords',
+      customChars: [],
+      label: '错题专项',
+      wrongSort: sortMap[wrongSort],
+      wrongLimit,
+      goal: null,
+    };
+    setPracticeConfig(cfg);
     onClose();
     if (onStartPractice) onStartPractice('wrongWords');
   };
@@ -411,6 +454,49 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
                     </div>
                   </div>
 
+                  <div className="flex flex-wrap gap-3 mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">排序:</span>
+                      {([
+                        { k: 'count' as WrongSortKey, label: '最高频' },
+                        { k: 'recent' as WrongSortKey, label: '最近' },
+                        { k: 'currentMode' as WrongSortKey, label: '当前模式' },
+                      ]).map(s => (
+                        <button
+                          key={s.k}
+                          onClick={() => setWrongSort(s.k)}
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                            wrongSort === s.k
+                              ? 'border-neon-pink bg-neon-pink/15 text-neon-pink'
+                              : 'border-slate-700/60 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 ml-auto">
+                      <span className="text-xs text-slate-400">练习数量:</span>
+                      {([
+                        { k: 10, label: '前10' },
+                        { k: 30, label: '前30' },
+                        { k: 9999, label: '全部' },
+                      ]).map(s => (
+                        <button
+                          key={s.k}
+                          onClick={() => setWrongLimit(s.k)}
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                            wrongLimit === s.k
+                              ? 'border-neon-cyan bg-neon-cyan/15 text-neon-cyan'
+                              : 'border-slate-700/60 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <h4 className="text-sm font-semibold text-slate-300 mb-3">
                     📝 高频错题 Top 15
                   </h4>
@@ -434,6 +520,10 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
                   >
                     <Play size={16} className="inline mr-2" />
                     开始错题专项练习
+                    <span className="text-xs opacity-70 ml-2">
+                      ({wrongLimit === 9999 ? '全部' : `前 ${wrongLimit} 个`}
+                      · {wrongSort === 'count' ? '最高频' : wrongSort === 'recent' ? '最近' : '当前模式'})
+                    </span>
                   </button>
                   {(status === 'playing' || status === 'paused') && (
                     <p className="text-xs text-center text-slate-500 mt-2">
@@ -457,27 +547,25 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
                         </tr>
                       </thead>
                       <tbody>
-                        {[...wrongRecords]
-                          .sort((a, b) => b.count - a.count)
-                          .map((r, i) => (
-                            <tr
-                              key={i}
-                              className="border-b border-slate-800/50 last:border-none hover:bg-slate-800/30"
-                            >
-                              <td className="py-2 px-3 font-mono text-neon-red/90">
-                                {r.text}
-                              </td>
-                              <td className="py-2 px-3 text-right text-neon-yellow font-mono">
-                                ×{r.count}
-                              </td>
-                              <td className="py-2 px-3 text-right text-slate-500 text-xs">
-                                {formatTimeAgo(r.lastSeen)}
-                              </td>
-                              <td className="py-2 px-3 text-right text-slate-400 text-xs">
-                                {getPracticeModeLabel(r.mode)}
-                              </td>
-                            </tr>
-                          ))}
+                        {sortedWrongRecords.map((r, i) => (
+                          <tr
+                            key={i}
+                            className="border-b border-slate-800/50 last:border-none hover:bg-slate-800/30"
+                          >
+                            <td className="py-2 px-3 font-mono text-neon-red/90">
+                              {r.text}
+                            </td>
+                            <td className="py-2 px-3 text-right text-neon-yellow font-mono">
+                              ×{r.count}
+                            </td>
+                            <td className="py-2 px-3 text-right text-slate-500 text-xs">
+                              {formatTimeAgo(r.lastSeen)}
+                            </td>
+                            <td className="py-2 px-3 text-right text-slate-400 text-xs">
+                              {getPracticeModeLabel(r.mode)}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>

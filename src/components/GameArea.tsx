@@ -4,7 +4,8 @@ import { GAME_CONFIG, getPracticeModeLabel } from '@/utils/constants';
 import { useGameLoop } from '@/hooks/useGameLoop';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { FallingItem } from './FallingItem';
-import { Trophy, Target, Clock, Flame, AlertTriangle } from 'lucide-react';
+import { Trophy, Target, Clock, Flame, AlertTriangle, Check, X, Target as GoalIcon } from 'lucide-react';
+import type { GoalType } from '@/types';
 
 export function GameArea() {
   const areaRef = useRef<HTMLDivElement>(null);
@@ -133,6 +134,8 @@ function GameOverOverlay() {
   const durationSec = useGameStore(s => s.getSessionDurationSec());
   const wrongDetails = useGameStore(s => s.wrongDetails);
   const practiceMode = useGameStore(s => s.practiceConfig.mode);
+  const wrongReview = useGameStore(s => s.wrongReviewSummary);
+  const goalResult = useGameStore(s => s.goalResult);
   const restart = useGameStore(s => s.restartGame);
 
   const total = correct + wrong;
@@ -142,6 +145,19 @@ function GameOverOverlay() {
   const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
 
   const topWrong = [...wrongDetails].sort((a, b) => b.count - a.count).slice(0, 6);
+
+  const goalLabel: Record<GoalType, string> = {
+    duration: '练习时长',
+    correctCount: '命中次数',
+    accuracy: '正确率',
+  };
+  const goalUnit: Record<GoalType, string> = {
+    duration: '秒',
+    correctCount: '次',
+    accuracy: '%',
+  };
+
+  const isWrongReviewMode = practiceMode === 'wrongWords' && wrongReview;
 
   return (
     <div className="absolute inset-0 flex items-center justify-center z-20 bg-bg-darker/80 backdrop-blur-sm overflow-auto scrollbar-thin">
@@ -154,6 +170,30 @@ function GameOverOverlay() {
             {getPracticeModeLabel(practiceMode)} · 生命耗尽
           </p>
         </div>
+
+        {goalResult && (
+          <div className={`mb-5 rounded-xl p-4 border ${
+            goalResult.reached
+              ? 'bg-neon-green/10 border-neon-green/40'
+              : 'bg-neon-yellow/10 border-neon-yellow/40'
+          }`}>
+            <div className="flex items-center gap-2 mb-2">
+              <GoalIcon size={18} className={goalResult.reached ? 'text-neon-green' : 'text-neon-yellow'} />
+              <span className={`text-sm font-bold ${goalResult.reached ? 'text-neon-green' : 'text-neon-yellow'}`}>
+                {goalResult.reached ? '🎯 目标达成！' : '⏳ 未达成目标'}
+              </span>
+            </div>
+            <div className="text-xs text-slate-300 flex items-center gap-3 flex-wrap">
+              <span>{goalLabel[goalResult.type]}</span>
+              <span className="font-mono">
+                <span className={goalResult.reached ? 'text-neon-green' : 'text-neon-yellow'}>
+                  {goalResult.actual}
+                </span>
+                <span className="text-slate-500"> / {goalResult.target}{goalUnit[goalResult.type]}</span>
+              </span>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="bg-slate-800/60 rounded-xl p-4 border border-neon-yellow/30">
@@ -197,7 +237,51 @@ function GameOverOverlay() {
           </div>
         </div>
 
-        {topWrong.length > 0 && (
+        {isWrongReviewMode && (
+          <div className="bg-slate-800/40 border border-neon-pink/30 rounded-xl p-4 mb-6 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-neon-pink">
+              📝 专项复习小结
+              <span className="text-xs text-slate-500 font-normal ml-auto">
+                共复习 {wrongReview.reviewed.length} 个
+              </span>
+            </div>
+            {wrongReview.mastered.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1 text-xs text-neon-green mb-1.5">
+                  <Check size={12} /> <span>已掌握 ({wrongReview.mastered.length})</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {wrongReview.mastered.map((t, i) => (
+                    <span key={i} className="px-2 py-0.5 rounded bg-neon-green/15 border border-neon-green/30 text-neon-green text-xs font-mono">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {wrongReview.stillWrong.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1 text-xs text-neon-red mb-1.5">
+                  <X size={12} /> <span>仍需加强 ({wrongReview.stillWrong.length})</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {wrongReview.stillWrong.map((w, i) => (
+                    <span key={i} className="px-2 py-0.5 rounded bg-neon-red/15 border border-neon-red/30 text-neon-red text-xs font-mono">
+                      {w.text} <span className="opacity-60">×{w.count}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {wrongReview.mastered.length === 0 && wrongReview.stillWrong.length === 0 && (
+              <div className="text-xs text-slate-500">
+                本局未对复习内容产生命中，建议延长练习时间
+              </div>
+            )}
+          </div>
+        )}
+
+        {!isWrongReviewMode && topWrong.length > 0 && (
           <div className="bg-slate-800/40 border border-neon-red/30 rounded-xl p-4 mb-6">
             <div className="flex items-center gap-2 text-sm font-semibold text-neon-red/90 mb-3">
               <AlertTriangle size={16} />

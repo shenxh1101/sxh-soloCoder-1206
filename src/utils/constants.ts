@@ -36,6 +36,9 @@ export const DEFAULT_PRACTICE_CONFIG: PracticeConfig = {
   mode: 'all',
   customChars: [],
   label: '全键练习',
+  goal: null,
+  wrongSort: 'count',
+  wrongLimit: 50,
 };
 
 export const GAME_CONFIG = {
@@ -125,7 +128,19 @@ export function pickWordsForPractice(
       return filterWordsByCustomSet(basePool, config.customChars);
     case 'wrongWords': {
       if (wrongRecords.length === 0) return basePool;
-      const texts = [...new Set(wrongRecords.slice(0, 50).map(r => r.text))];
+      let pool = [...wrongRecords];
+      const sort = config.wrongSort ?? 'count';
+      const limit = config.wrongLimit ?? 50;
+      if (sort === 'count') {
+        pool.sort((a, b) => b.count - a.count);
+      } else if (sort === 'recent') {
+        pool.sort((a, b) => b.lastSeen - a.lastSeen);
+      } else if (sort === 'mode') {
+        const curMode = config.mode;
+        pool = pool.filter(r => r.mode === curMode);
+        if (pool.length === 0) pool = [...wrongRecords].sort((a, b) => b.count - a.count);
+      }
+      const texts = [...new Set(pool.slice(0, limit).map(r => r.text))];
       return texts.length > 0 ? texts : basePool;
     }
     default:

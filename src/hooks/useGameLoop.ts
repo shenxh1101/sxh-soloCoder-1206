@@ -6,6 +6,7 @@ export function useGameLoop(areaRef: React.RefObject<HTMLDivElement>) {
   const rafRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number>(0);
   const lastSpawnRef = useRef<number>(0);
+  const endedByGoalRef = useRef<boolean>(false);
 
   useEffect(() => {
     const tick = (now: number) => {
@@ -25,8 +26,32 @@ export function useGameLoop(areaRef: React.RefObject<HTMLDivElement>) {
           state.spawnItem(area.clientWidth);
           lastSpawnRef.current = now;
         }
+
+        // Goal check: auto end when reached
+        const goal = state.practiceConfig.goal;
+        if (goal && !endedByGoalRef.current) {
+          let reached = false;
+          if (goal.type === 'duration') {
+            reached = state.getSessionDurationSec() >= goal.value;
+          } else if (goal.type === 'correctCount') {
+            reached = state.correctCount >= goal.value;
+          } else if (goal.type === 'accuracy') {
+            const denom = state.correctCount + state.wrongCount;
+            if (denom >= 10) {
+              const acc = Math.round((state.correctCount / denom) * 100);
+              reached = acc >= goal.value;
+            }
+          }
+          if (reached) {
+            endedByGoalRef.current = true;
+            state.endGame();
+          }
+        }
       } else {
         lastFrameRef.current = now;
+        if (state.status === 'idle') {
+          endedByGoalRef.current = false;
+        }
       }
 
       useGameStore.getState().clearScreenFlash();
@@ -44,6 +69,7 @@ export function useGameLoop(areaRef: React.RefObject<HTMLDivElement>) {
     if (status === 'idle' || status === 'gameover') {
       lastSpawnRef.current = 0;
       lastFrameRef.current = 0;
+      endedByGoalRef.current = false;
     }
   }, [useGameStore(s => s.status)]);
 }

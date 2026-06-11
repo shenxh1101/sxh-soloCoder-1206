@@ -7,6 +7,7 @@ import {
   getLastNDaysStats,
   getWrongRecords,
   addWrongRecords,
+  applyWrongReview as applyReview,
   clearWrongRecords as clearWrong,
 } from '@/utils/storage';
 import type { DailyStats, WrongRecord } from '@/types';
@@ -26,6 +27,7 @@ interface StatsState {
   updateHighestCombo: (combo: number) => void;
   getLastDays: (n: number) => DailyStats[];
   addWrongWords: (words: WrongWordInput[]) => void;
+  applyWrongReview: (mastered: string[], stillWrong: { text: string; count: number }[]) => void;
   clearWrongRecords: () => void;
   getTopWrong: (n: number) => WrongRecord[];
 }
@@ -67,6 +69,11 @@ export const useStatsStore = create<StatsState>((set, get) => ({
       mode: w.mode ?? 'all',
     }));
     const updated = addWrongRecords(items);
+    set({ wrongRecords: updated });
+  },
+
+  applyWrongReview: (mastered: string[], stillWrong: { text: string; count: number }[]) => {
+    const updated = applyReview(mastered, stillWrong);
     set({ wrongRecords: updated });
   },
 

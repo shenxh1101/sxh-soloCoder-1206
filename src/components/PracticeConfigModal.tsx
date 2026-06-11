@@ -3,12 +3,16 @@ import { Modal } from './Modal';
 import { useGameStore } from '@/stores/useGameStore';
 import { useStatsStore } from '@/stores/useStatsStore';
 import { PRACTICE_MODES } from '@/types';
-import type { PracticeMode } from '@/types';
+import type { PracticeMode, GoalType, PracticeGoal } from '@/types';
 import {
   Settings2,
   ChevronRight,
   Check,
   Type,
+  Target,
+  Clock,
+  Flame,
+  Gauge,
 } from 'lucide-react';
 
 interface Props {
@@ -16,15 +20,38 @@ interface Props {
   onClose: () => void;
 }
 
+const GOAL_PRESETS: { type: GoalType; value: number; label: string }[] = [
+  { type: 'duration', value: 180, label: '练 3 分钟' },
+  { type: 'duration', value: 300, label: '练 5 分钟' },
+  { type: 'duration', value: 600, label: '练 10 分钟' },
+  { type: 'correctCount', value: 50, label: '命中 50 次' },
+  { type: 'correctCount', value: 100, label: '命中 100 次' },
+  { type: 'correctCount', value: 200, label: '命中 200 次' },
+  { type: 'accuracy', value: 90, label: '正确率 90%' },
+  { type: 'accuracy', value: 95, label: '正确率 95%' },
+  { type: 'accuracy', value: 98, label: '正确率 98%' },
+];
+
+const GOAL_ICONS: Record<GoalType, any> = {
+  duration: Clock,
+  correctCount: Flame,
+  accuracy: Gauge,
+};
+
 export function PracticeConfigModal({ open, onClose }: Props) {
   const currentMode = useGameStore(s => s.practiceConfig.mode);
   const customChars = useGameStore(s => s.practiceConfig.customChars);
+  const currentGoal = useGameStore(s => s.practiceConfig.goal);
+  const setPracticeConfig = useGameStore(s => s.setPracticeConfig);
   const setPracticeMode = useGameStore(s => s.setPracticeMode);
   const status = useGameStore(s => s.status);
   const wrongCount = useStatsStore(s => s.wrongRecords.length);
 
   const [selectedMode, setSelectedMode] = useState<PracticeMode>(currentMode);
   const [customInput, setCustomInput] = useState(customChars.join(''));
+  const [goalType, setGoalType] = useState<GoalType | null>(currentGoal?.type ?? null);
+  const [goalValue, setGoalValue] = useState<number>(currentGoal?.value ?? 180);
+  const [customGoalInput, setCustomGoalInput] = useState<string>('');
 
   const canChange = status === 'idle' || status === 'gameover';
 
@@ -33,7 +60,19 @@ export function PracticeConfigModal({ open, onClose }: Props) {
     if (selectedMode === 'custom') {
       chars = [...new Set(customInput.split('').filter(c => c.trim()))];
     }
-    setPracticeMode(selectedMode, chars);
+    const goal: PracticeGoal | null = goalType
+      ? { type: goalType, value: goalValue }
+      : null;
+
+    const prevCfg = useGameStore.getState().practiceConfig;
+    setPracticeConfig({
+      mode: selectedMode,
+      customChars: chars,
+      label: getPracticeModeLabel(selectedMode),
+      goal,
+      wrongSort: prevCfg.wrongSort ?? 'count',
+      wrongLimit: prevCfg.wrongLimit ?? 50,
+    });
     onClose();
   };
 
@@ -60,9 +99,11 @@ export function PracticeConfigModal({ open, onClose }: Props) {
     }
   }, [selectedMode, customInput]);
 
+  const presetsForType = GOAL_PRESETS.filter(p => p.type === goalType);
+
   return (
     <Modal open={open} onClose={onClose} title="⚙️ 练习模式配置" accentColor="cyan">
-      <div className="p-6 space-y-5">
+      <div className="p-6 space-y-5 max-h-[80vh] overflow-auto scrollbar-thin">
         {!canChange && (
           <div className="bg-neon-yellow/10 border border-neon-yellow/30 text-neon-yellow text-sm rounded-xl p-3 flex items-start gap-2">
             <Type size={18} className="mt-0.5 flex-shrink-0" />
@@ -73,41 +114,47 @@ export function PracticeConfigModal({ open, onClose }: Props) {
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {PRACTICE_MODES.map(mode => {
-            const isSelected = selectedMode === mode.key;
-            const isDisabled = !canChange;
-            const isWrongMode = mode.key === 'wrongWords' && wrongCount === 0;
-            return (
-              <button
-                key={mode.key}
-                onClick={() => {
-                  if (isDisabled || isWrongMode) return;
-                  setSelectedMode(mode.key);
-                }}
-                disabled={isDisabled || isWrongMode}
-                className={`relative text-left p-4 rounded-xl border-2 transition-all ${
-                  isSelected
-                    ? 'border-neon-cyan bg-neon-cyan/10 shadow-neon-cyan'
-                    : 'border-slate-700/50 bg-slate-800/40 hover:border-slate-600'
-                } ${isDisabled || isWrongMode ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02]'}`}
-              >
-                {isSelected && (
-                  <div className="absolute top-2 right-2">
-                    <Check size={16} className="text-neon-cyan" />
-                  </div>
-                )}
-                <div className="text-3xl mb-2">{mode.icon}</div>
-                <div className="font-bold text-slate-100 mb-1">{mode.label}</div>
-                <div className="text-xs text-slate-400 leading-relaxed">
-                  {mode.desc}
-                  {isWrongMode && (
-                    <span className="block text-neon-red/70 mt-1">暂无错题记录</span>
+        <div>
+          <div className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+            <Target size={16} className="text-neon-cyan" />
+            选择练习模式
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {PRACTICE_MODES.map(mode => {
+              const isSelected = selectedMode === mode.key;
+              const isDisabled = !canChange;
+              const isWrongMode = mode.key === 'wrongWords' && wrongCount === 0;
+              return (
+                <button
+                  key={mode.key}
+                  onClick={() => {
+                    if (isDisabled || isWrongMode) return;
+                    setSelectedMode(mode.key);
+                  }}
+                  disabled={isDisabled || isWrongMode}
+                  className={`relative text-left p-4 rounded-xl border-2 transition-all ${
+                    isSelected
+                      ? 'border-neon-cyan bg-neon-cyan/10 shadow-neon-cyan'
+                      : 'border-slate-700/50 bg-slate-800/40 hover:border-slate-600'
+                  } ${isDisabled || isWrongMode ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02]'}`}
+                >
+                  {isSelected && (
+                    <div className="absolute top-2 right-2">
+                      <Check size={16} className="text-neon-cyan" />
+                    </div>
                   )}
-                </div>
-              </button>
-            );
-          })}
+                  <div className="text-3xl mb-2">{mode.icon}</div>
+                  <div className="font-bold text-slate-100 mb-1">{mode.label}</div>
+                  <div className="text-xs text-slate-400 leading-relaxed">
+                    {mode.desc}
+                    {isWrongMode && (
+                      <span className="block text-neon-red/70 mt-1">暂无错题记录</span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {selectedMode === 'custom' && (
@@ -165,6 +212,107 @@ export function PracticeConfigModal({ open, onClose }: Props) {
           </div>
         )}
 
+        <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+              <Target size={16} className="text-neon-pink" />
+              设置练习目标（可选）
+            </div>
+            <button
+              onClick={() => setGoalType(null)}
+              disabled={!canChange || goalType === null}
+              className="text-xs text-slate-500 hover:text-slate-300 disabled:opacity-40"
+            >
+              不设目标
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {([
+              { k: 'duration' as GoalType, label: '时长' },
+              { k: 'correctCount' as GoalType, label: '命中数' },
+              { k: 'accuracy' as GoalType, label: '正确率' },
+            ]).map(t => {
+              const Icon = GOAL_ICONS[t.k];
+              const active = goalType === t.k;
+              return (
+                <button
+                  key={t.k}
+                  onClick={() => {
+                    if (!canChange) return;
+                    setGoalType(t.k);
+                    if (t.k === 'duration') setGoalValue(180);
+                    if (t.k === 'correctCount') setGoalValue(50);
+                    if (t.k === 'accuracy') setGoalValue(90);
+                  }}
+                  disabled={!canChange}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-all ${
+                    active
+                      ? 'border-neon-pink bg-neon-pink/15 text-neon-pink'
+                      : 'border-slate-700/60 text-slate-400 hover:text-slate-200'
+                  } disabled:opacity-40`}
+                >
+                  <Icon size={14} /> {t.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {goalType && (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {presetsForType.map(p => (
+                  <button
+                    key={`${p.type}-${p.value}`}
+                    onClick={() => canChange && setGoalValue(p.value)}
+                    disabled={!canChange}
+                    className={`px-3 py-1.5 rounded-lg border text-sm transition-all ${
+                      goalValue === p.value
+                        ? 'border-neon-cyan bg-neon-cyan/15 text-neon-cyan'
+                        : 'border-slate-700/60 text-slate-400 hover:text-slate-200'
+                    } disabled:opacity-40`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">自定义:</span>
+                <input
+                  type="number"
+                  value={customGoalInput}
+                  onChange={e => setCustomGoalInput(e.target.value)}
+                  onBlur={() => {
+                    const v = parseInt(customGoalInput, 10);
+                    if (!isNaN(v) && v > 0) setGoalValue(v);
+                  }}
+                  placeholder={
+                    goalType === 'duration'
+                      ? '秒数'
+                      : goalType === 'correctCount'
+                        ? '次数'
+                        : '百分比 0-100'
+                  }
+                  className="w-24 bg-slate-900/70 border border-slate-600/60 rounded-lg px-3 py-1.5 text-sm font-mono text-slate-200 focus:outline-none focus:border-neon-cyan/70 disabled:opacity-50"
+                  disabled={!canChange}
+                />
+                <span className="text-xs text-slate-500">
+                  {goalType === 'duration' ? '秒' : goalType === 'correctCount' ? '次' : '%'}
+                </span>
+                <span className="ml-auto text-xs text-slate-400">
+                  当前目标: <span className="text-neon-cyan font-mono">{goalValue}{goalType === 'duration' ? '秒' : goalType === 'correctCount' ? '次' : '%'}</span>
+                </span>
+              </div>
+            </>
+          )}
+
+          {!goalType && (
+            <div className="text-xs text-slate-500">
+              💡 未设置目标时，游戏将持续进行直到生命耗尽或手动结束
+            </div>
+          )}
+        </div>
+
         <div className="flex justify-end gap-3 pt-2">
           <button
             onClick={onClose}
@@ -185,4 +333,19 @@ export function PracticeConfigModal({ open, onClose }: Props) {
       </div>
     </Modal>
   );
+}
+
+function getPracticeModeLabel(mode: PracticeMode): string {
+  const map: Record<PracticeMode, string> = {
+    all: '全键练习',
+    leftHand: '左手区',
+    rightHand: '右手区',
+    homeRow: '基准键位',
+    topRow: '上行键位',
+    bottomRow: '下行键位',
+    digitRow: '数字行',
+    custom: '自定义',
+    wrongWords: '错题专项',
+  };
+  return map[mode] ?? mode;
 }
