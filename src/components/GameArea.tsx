@@ -1,15 +1,12 @@
 import { useRef } from 'react';
 import { useGameStore } from '@/stores/useGameStore';
-import { GAME_CONFIG } from '@/utils/constants';
+import { GAME_CONFIG, getPracticeModeLabel } from '@/utils/constants';
 import { useGameLoop } from '@/hooks/useGameLoop';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { FallingItem } from './FallingItem';
+import { Trophy, Target, Clock, Flame, AlertTriangle } from 'lucide-react';
 
-interface Props {
-  onVirtualKey?: (key: string) => void;
-}
-
-export function GameArea(_props: Props) {
+export function GameArea() {
   const areaRef = useRef<HTMLDivElement>(null);
   useGameLoop(areaRef);
   useKeyboard(areaRef);
@@ -98,10 +95,12 @@ export function GameArea(_props: Props) {
             ⌨️ TYPING RUSH
           </h1>
           <p className="text-slate-300 text-lg mb-2">键盘指法练习 · 挑战你的极限</p>
-          <p className="text-slate-500 text-sm mb-8">按 <kbd className="px-2 py-0.5 bg-slate-800 rounded border border-slate-600 text-neon-cyan font-mono">空格</kbd> 或点击下方按钮开始</p>
+          <p className="text-slate-500 text-sm mb-8">
+            按 <kbd className="px-2 py-0.5 bg-slate-800 rounded border border-slate-600 text-neon-cyan font-mono">空格</kbd> 或点击下方按钮开始
+          </p>
           <div className="text-slate-400 text-sm max-w-md text-center">
             <p>🎯 敲对字母/单词得分 · ❌ 敲错或超时扣血</p>
-            <p className="mt-1">🔥 保持连击获得额外加成</p>
+            <p className="mt-1">🔥 保持连击获得额外加成 · ⚙️ 可切换练习模式</p>
           </div>
         </div>
       )}
@@ -112,7 +111,9 @@ export function GameArea(_props: Props) {
             <div className="font-display text-7xl font-black text-neon-yellow mb-4 animate-pulse">
               ⏸ 暂停
             </div>
-            <p className="text-slate-300">按 <kbd className="px-2 py-0.5 bg-slate-800 rounded border border-slate-600 text-neon-cyan font-mono">ESC</kbd> 继续</p>
+            <p className="text-slate-300">
+              按 <kbd className="px-2 py-0.5 bg-slate-800 rounded border border-slate-600 text-neon-cyan font-mono">ESC</kbd> 继续
+            </p>
           </div>
         </div>
       )}
@@ -129,48 +130,95 @@ function GameOverOverlay() {
   const maxCombo = useGameStore(s => s.maxCombo);
   const correct = useGameStore(s => s.correctCount);
   const wrong = useGameStore(s => s.wrongCount);
-  const elapsed = useGameStore(s => s.getElapsedSeconds());
+  const durationSec = useGameStore(s => s.getSessionDurationSec());
+  const wrongDetails = useGameStore(s => s.wrongDetails);
+  const practiceMode = useGameStore(s => s.practiceConfig.mode);
   const restart = useGameStore(s => s.restartGame);
 
   const total = correct + wrong;
   const acc = total > 0 ? Math.round((correct / total) * 100) : 0;
-  const mins = Math.floor(elapsed / 60);
-  const secs = elapsed % 60;
+  const mins = Math.floor(durationSec / 60);
+  const secs = durationSec % 60;
+  const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+
+  const topWrong = [...wrongDetails].sort((a, b) => b.count - a.count).slice(0, 6);
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center z-20 bg-bg-darker/80 backdrop-blur-sm">
-      <div className="bg-slate-900/95 border-2 border-neon-purple rounded-3xl p-10 max-w-md w-full mx-4 shadow-neon-purple text-center">
-        <div className="font-display text-5xl font-black mb-2 bg-gradient-to-r from-neon-red to-neon-pink bg-clip-text text-transparent">
-          💥 游戏结束
+    <div className="absolute inset-0 flex items-center justify-center z-20 bg-bg-darker/80 backdrop-blur-sm overflow-auto scrollbar-thin">
+      <div className="bg-slate-900/95 border-2 border-neon-purple rounded-3xl p-8 max-w-lg w-full mx-4 my-6 shadow-neon-purple">
+        <div className="text-center mb-6">
+          <div className="font-display text-4xl font-black mb-1 bg-gradient-to-r from-neon-red to-neon-pink bg-clip-text text-transparent">
+            💥 游戏结束
+          </div>
+          <p className="text-slate-400 text-sm">
+            {getPracticeModeLabel(practiceMode)} · 生命耗尽
+          </p>
         </div>
-        <p className="text-slate-400 mb-6">生命耗尽！再接再厉！</p>
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="bg-slate-800/60 rounded-xl p-4 border border-neon-yellow/30">
-            <div className="text-xs text-neon-yellow/70 mb-1">最终分数</div>
-            <div className="text-3xl font-bold text-neon-yellow font-mono">
+            <div className="flex items-center gap-2 text-xs text-neon-yellow/70 mb-1">
+              <Trophy size={14} />
+              <span>最终分数</span>
+            </div>
+            <div className="text-2xl font-bold text-neon-yellow font-mono">
               {score.toLocaleString()}
             </div>
           </div>
           <div className="bg-slate-800/60 rounded-xl p-4 border border-neon-green/30">
-            <div className="text-xs text-neon-green/70 mb-1">最高连击</div>
-            <div className="text-3xl font-bold text-neon-green font-mono">
+            <div className="flex items-center gap-2 text-xs text-neon-green/70 mb-1">
+              <Flame size={14} />
+              <span>最高连击</span>
+            </div>
+            <div className="text-2xl font-bold text-neon-green font-mono">
               {maxCombo}
             </div>
           </div>
           <div className="bg-slate-800/60 rounded-xl p-4 border border-neon-cyan/30">
-            <div className="text-xs text-neon-cyan/70 mb-1">正确率</div>
-            <div className="text-2xl font-bold text-neon-cyan font-mono">
+            <div className="flex items-center gap-2 text-xs text-neon-cyan/70 mb-1">
+              <Target size={14} />
+              <span>正确率</span>
+            </div>
+            <div className="text-xl font-bold text-neon-cyan font-mono">
               {acc}%
+              <span className="text-xs text-slate-500 ml-2">
+                ({correct}/{total})
+              </span>
             </div>
           </div>
           <div className="bg-slate-800/60 rounded-xl p-4 border border-neon-purple/30">
-            <div className="text-xs text-neon-purple/70 mb-1">用时</div>
-            <div className="text-2xl font-bold text-neon-purple font-mono">
-              {mins}:{secs.toString().padStart(2, '0')}
+            <div className="flex items-center gap-2 text-xs text-neon-purple/70 mb-1">
+              <Clock size={14} />
+              <span>本局用时</span>
+            </div>
+            <div className="text-xl font-bold text-neon-purple font-mono">
+              {timeStr}
             </div>
           </div>
         </div>
+
+        {topWrong.length > 0 && (
+          <div className="bg-slate-800/40 border border-neon-red/30 rounded-xl p-4 mb-6">
+            <div className="flex items-center gap-2 text-sm font-semibold text-neon-red/90 mb-3">
+              <AlertTriangle size={16} />
+              <span>本局常错内容</span>
+              <span className="text-xs text-slate-500 font-normal ml-auto">
+                共 {wrongDetails.length} 种
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {topWrong.map((w, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-1.5 bg-neon-red/10 border border-neon-red/30 rounded-lg px-2.5 py-1"
+                >
+                  <span className="font-mono text-sm text-neon-red/90">{w.text}</span>
+                  <span className="text-xs text-neon-red/60">×{w.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <button onClick={restart} className="btn-purple w-full text-lg">
           🔄 再来一局

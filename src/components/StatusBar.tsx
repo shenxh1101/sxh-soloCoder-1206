@@ -1,6 +1,6 @@
 import { useGameStore } from '@/stores/useGameStore';
 import { useStatsStore } from '@/stores/useStatsStore';
-import { DIFFICULTY_CONFIG } from '@/utils/constants';
+import { DIFFICULTY_CONFIG, getPracticeModeLabel } from '@/utils/constants';
 import {
   Trophy,
   Heart,
@@ -8,6 +8,7 @@ import {
   Timer,
   Target,
   Zap,
+  Layers,
 } from 'lucide-react';
 
 export function StatusBar() {
@@ -15,6 +16,7 @@ export function StatusBar() {
   const lives = useGameStore(s => s.lives);
   const maxLives = useGameStore(s => s.maxLives);
   const difficulty = useGameStore(s => s.difficulty);
+  const practiceMode = useGameStore(s => s.practiceConfig.mode);
   const combo = useGameStore(s => s.combo);
   const maxCombo = useGameStore(s => s.maxCombo);
   const elapsed = useGameStore(s => s.getElapsedSeconds());
@@ -74,6 +76,16 @@ export function StatusBar() {
       </div>
 
       <div className="stat-card">
+        <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+          <Layers size={14} />
+          <span>模式</span>
+        </div>
+        <div className="text-sm font-bold text-neon-cyan">
+          {getPracticeModeLabel(practiceMode)}
+        </div>
+      </div>
+
+      <div className="stat-card">
         <div className="flex items-center gap-2 text-neon-green/80 text-xs mb-1">
           <Zap size={14} />
           <span>连击</span>
@@ -83,7 +95,7 @@ export function StatusBar() {
           {combo >= 10 && (
             <Flame
               size={18}
-              className="inline ml-1 text-neon-orange animate-pulse"
+              className="inline ml-1 animate-pulse"
               style={{ color: '#f97316' }}
             />
           )}

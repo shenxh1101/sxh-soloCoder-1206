@@ -1,5 +1,5 @@
 import { useGameStore } from '@/stores/useGameStore';
-import { DIFFICULTY_CONFIG } from '@/utils/constants';
+import { DIFFICULTY_CONFIG, getPracticeModeLabel } from '@/utils/constants';
 import type { Difficulty } from '@/types';
 import {
   Play,
@@ -7,17 +7,19 @@ import {
   RotateCcw,
   BookOpen,
   BarChart3,
-  Zap,
+  Settings2,
 } from 'lucide-react';
 
 interface Props {
   onOpenWordEditor: () => void;
   onOpenStats: () => void;
+  onOpenPracticeConfig: () => void;
 }
 
-export function ControlPanel({ onOpenWordEditor, onOpenStats }: Props) {
+export function ControlPanel({ onOpenWordEditor, onOpenStats, onOpenPracticeConfig }: Props) {
   const status = useGameStore(s => s.status);
   const difficulty = useGameStore(s => s.difficulty);
+  const practiceMode = useGameStore(s => s.practiceConfig.mode);
   const startGame = useGameStore(s => s.startGame);
   const pauseGame = useGameStore(s => s.pauseGame);
   const resumeGame = useGameStore(s => s.resumeGame);
@@ -55,6 +57,18 @@ export function ControlPanel({ onOpenWordEditor, onOpenStats }: Props) {
           );
         })}
       </div>
+
+      <button
+        onClick={onOpenPracticeConfig}
+        className="btn-cyan flex items-center gap-2"
+        title={`练习模式：${getPracticeModeLabel(practiceMode)}`}
+      >
+        <Settings2 size={18} />
+        <span className="hidden sm:inline">{getPracticeModeLabel(practiceMode)}</span>
+        <span className="sm:hidden">模式</span>
+      </button>
+
+      <div className="w-px h-8 bg-slate-700/60 mx-1" />
 
       <div className="flex items-center gap-2">
         <button
@@ -111,7 +125,6 @@ export function ControlPanel({ onOpenWordEditor, onOpenStats }: Props) {
       </button>
 
       <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 font-mono bg-slate-800/40 px-3 py-1.5 rounded-full border border-slate-700/40">
-        <Zap size={12} className="text-neon-yellow" />
         <span>空格开始 · ESC暂停</span>
       </div>
     </div>

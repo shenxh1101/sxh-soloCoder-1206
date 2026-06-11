@@ -5,6 +5,18 @@ import { GAME_CONFIG } from '@/utils/constants';
 export function useKeyboard(areaRef: React.RefObject<HTMLDivElement>) {
   const activeTimerRef = useRef<number | null>(null);
 
+  const isTypingInInput = (target: EventTarget | null): boolean => {
+    if (!target || !(target instanceof HTMLElement)) return false;
+    const tag = target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) {
+      return true;
+    }
+    if (target.closest('[data-modal-open="true"]')) {
+      return true;
+    }
+    return false;
+  };
+
   const normalizeKey = (code: string, key: string): string | null => {
     if (key === ' ') return 'Space';
     if (key === 'Backspace') return 'Backspace';
@@ -32,21 +44,25 @@ export function useKeyboard(areaRef: React.RefObject<HTMLDivElement>) {
       const state = useGameStore.getState();
       const area = areaRef.current;
 
-      if (e.key === 'Escape') {
+      const inInput = isTypingInInput(e.target);
+
+      if (e.key === 'Escape' && !inInput) {
         e.preventDefault();
         if (state.status === 'playing') state.pauseGame();
         else if (state.status === 'paused') state.resumeGame();
         return;
       }
 
-      if (e.key === ' ' && (state.status === 'idle' || state.status === 'gameover')) {
-        e.preventDefault();
-        state.startGame();
-        return;
+      if (e.key === ' ' && !inInput) {
+        if (state.status === 'idle' || state.status === 'gameover') {
+          e.preventDefault();
+          state.startGame();
+          return;
+        }
       }
 
       const displayKey = normalizeKey(e.code, e.key);
-      if (displayKey) {
+      if (displayKey && !inInput) {
         if (activeTimerRef.current) {
           window.clearTimeout(activeTimerRef.current);
         }
@@ -56,7 +72,8 @@ export function useKeyboard(areaRef: React.RefObject<HTMLDivElement>) {
         }, GAME_CONFIG.ACTIVE_KEY_DURATION);
       }
 
-      if (state.status === 'playing' && e.key.length === 1) {
+      if (state.status === 'playing' && e.key.length === 1 && !inInput) {
+        e.preventDefault();
         state.processKey(e.key, area?.clientHeight ?? 0);
       }
     };

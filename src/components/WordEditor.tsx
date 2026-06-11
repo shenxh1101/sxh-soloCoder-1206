@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Modal } from './Modal';
 import { useWordStore } from '@/stores/useWordStore';
-import type { WordLibrary, Difficulty } from '@/types';
+import type { WordLibrary } from '@/types';
 import { DEFAULT_WORD_LIBRARY } from '@/utils/defaultWords';
 import {
   Upload,
@@ -18,8 +18,9 @@ interface Props {
   onClose: () => void;
 }
 
-const TABS: { key: Difficulty; label: string; hint: string; color: string }[] = [
-  { key: 'easy', label: '简单', hint: '单字符/字母', color: 'text-neon-green border-neon-green' },
+const TABS: { key: keyof WordLibrary; label: string; hint: string; color: string }[] = [
+  { key: 'easy', label: '简单', hint: '单字母', color: 'text-neon-green border-neon-green' },
+  { key: 'digits', label: '数字', hint: '0-9 数字', color: 'text-neon-yellow border-neon-yellow' },
   { key: 'normal', label: '普通', hint: '3-5字母短单词', color: 'text-neon-cyan border-neon-cyan' },
   { key: 'hard', label: '困难', hint: '6+字母长单词', color: 'text-neon-pink border-neon-pink' },
 ];
@@ -30,7 +31,7 @@ export function WordEditor({ open, onClose }: Props) {
   const resetLibrary = useWordStore(s => s.resetLibrary);
   const loadLibrary = useWordStore(s => s.loadLibrary);
 
-  const [activeTab, setActiveTab] = useState<Difficulty>('easy');
+  const [activeTab, setActiveTab] = useState<keyof WordLibrary>('easy');
   const [jsonText, setJsonText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [newWord, setNewWord] = useState('');
@@ -55,16 +56,18 @@ export function WordEditor({ open, onClose }: Props) {
     try {
       const parsed = JSON.parse(jsonText) as WordLibrary;
       if (!parsed || typeof parsed !== 'object') throw new Error('必须是JSON对象');
-      for (const k of ['easy', 'normal', 'hard'] as const) {
+      const keys: (keyof WordLibrary)[] = ['easy', 'digits', 'normal', 'hard'];
+      for (const k of keys) {
         if (!Array.isArray(parsed[k])) throw new Error(`${k} 必须是字符串数组`);
         if (parsed[k].some((w: unknown) => typeof w !== 'string')) {
           throw new Error(`${k} 数组元素必须是字符串`);
         }
       }
       saveLibrary({
-        easy: parsed.easy.filter(w => w.length > 0),
-        normal: parsed.normal.filter(w => w.length > 0),
-        hard: parsed.hard.filter(w => w.length > 0),
+        easy: (parsed.easy ?? []).filter((w: string) => w.length > 0),
+        digits: (parsed.digits ?? []).filter((w: string) => w.length > 0),
+        normal: (parsed.normal ?? []).filter((w: string) => w.length > 0),
+        hard: (parsed.hard ?? []).filter((w: string) => w.length > 0),
       });
       setError(null);
     } catch (e) {
@@ -96,13 +99,15 @@ export function WordEditor({ open, onClose }: Props) {
       const text = await file.text();
       const parsed = JSON.parse(text) as WordLibrary;
       if (!parsed || typeof parsed !== 'object') throw new Error('必须是JSON对象');
-      for (const k of ['easy', 'normal', 'hard'] as const) {
+      const keys: (keyof WordLibrary)[] = ['easy', 'digits', 'normal', 'hard'];
+      for (const k of keys) {
         if (!Array.isArray(parsed[k])) throw new Error(`${k} 必须是字符串数组`);
       }
       saveLibrary({
-        easy: parsed.easy.filter((w: unknown) => typeof w === 'string' && w.length > 0),
-        normal: parsed.normal.filter((w: unknown) => typeof w === 'string' && w.length > 0),
-        hard: parsed.hard.filter((w: unknown) => typeof w === 'string' && w.length > 0),
+        easy: (parsed.easy ?? []).filter((w: unknown) => typeof w === 'string' && w.length > 0),
+        digits: (parsed.digits ?? []).filter((w: unknown) => typeof w === 'string' && w.length > 0),
+        normal: (parsed.normal ?? []).filter((w: unknown) => typeof w === 'string' && w.length > 0),
+        hard: (parsed.hard ?? []).filter((w: unknown) => typeof w === 'string' && w.length > 0),
       });
       setError(null);
     } catch (e) {
@@ -167,7 +172,7 @@ export function WordEditor({ open, onClose }: Props) {
             </button>
           </div>
           <div className="text-xs text-slate-400">
-            词库格式: <code className="text-neon-cyan">{"{ easy: string[], normal: string[], hard: string[] }"}</code>
+            词库格式: <code className="text-neon-cyan">{"{ easy, digits, normal, hard } string[]"}</code>
           </div>
         </div>
 

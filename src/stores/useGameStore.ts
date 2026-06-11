@@ -1,14 +1,28 @@
 import { create } from 'zustand';
-import { GAME_CONFIG, DIFFICULTY_CONFIG } from '@/utils/constants';
+import { GAME_CONFIG, DIFFICULTY_CONFIG, DEFAULT_PRACTICE_CONFIG, pickWordsForPractice } from '@/utils/constants';
 import { useWordStore } from './useWordStore';
 import { useStatsStore } from './useStatsStore';
-import type { GameStatus, Difficulty, FallingItem, FloatingScore } from '@/types';
+import { getLastPracticeConfig, setLastPracticeConfig } from '@/utils/storage';
+import type {
+  GameStatus,
+  Difficulty,
+  FallingItem,
+  FloatingScore,
+  PracticeConfig,
+  PracticeMode,
+  WrongRecord as WrongRecordType,
+} from '@/types';
 
 let itemIdCounter = 0;
 let floatIdCounter = 0;
 
 function uid(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${(++itemIdCounter).toString(36)}`;
+}
+
+interface WrongRecordLocal {
+  text: string;
+  count: number;
 }
 
 interface GameActions {
@@ -18,6 +32,8 @@ interface GameActions {
   restartGame: () => void;
   endGame: () => void;
   setDifficulty: (d: Difficulty) => void;
+  setPracticeConfig: (cfg: PracticeConfig) => void;
+  setPracticeMode: (mode: PracticeMode, customChars?: string[]) => void;
   spawnItem: (areaWidth: number) => void;
   updateItems: (deltaMs: number, areaHeight: number) => void;
   processKey: (key: string, areaHeightPx?: number) => { handled: boolean; correct: boolean };
@@ -25,44 +41,53 @@ interface GameActions {
   cleanupFloatingScores: (now: number) => void;
   clearScreenFlash: () => void;
   getElapsedSeconds: () => number;
+  getSessionDurationSec: () => number;
 }
 
 interface GameState extends GameActions {
   status: GameStatus;
   difficulty: Difficulty;
+  practiceConfig: PracticeConfig;
   score: number;
   lives: number;
   maxLives: number;
   combo: number;
   maxCombo: number;
   startTime: number | null;
+  endTime: number | null;
   pausedTime: number;
   totalPausedTime: number;
+  sessionDuration: number;
   correctCount: number;
   wrongCount: number;
+  wrongDetails: WrongRecordLocal[];
   fallingItems: FallingItem[];
   activeKey: string | null;
   floatingScores: FloatingScore[];
   screenFlash: { type: 'milestone' | 'error' | null; time: number };
 }
 
-const initialState = {
-  status: 'idle' as GameStatus,
-  difficulty: 'normal' as Difficulty,
+const initialState: Omit<GameState, keyof GameActions> = {
+  status: 'idle',
+  difficulty: 'normal',
+  practiceConfig: DEFAULT_PRACTICE_CONFIG,
   score: 0,
   lives: GAME_CONFIG.MAX_LIVES,
   maxLives: GAME_CONFIG.MAX_LIVES,
   combo: 0,
   maxCombo: 0,
-  startTime: null as number | null,
+  startTime: null,
+  endTime: null,
   pausedTime: 0,
   totalPausedTime: 0,
+  sessionDuration: 0,
   correctCount: 0,
   wrongCount: 0,
-  fallingItems: [] as FallingItem[],
-  activeKey: null as string | null,
-  floatingScores: [] as FloatingScore[],
-  screenFlash: { type: null as 'milestone' | 'error' | null, time: 0 },
+  wrongDetails: [],
+  fallingItems: [],
+  activeKey: null,
+  floatingScores: [],
+  screenFlash: { type: null, time: 0 },
 };
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -72,9 +97,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     const stats = useStatsStore.getState();
     stats.refresh();
     const prevDifficulty = get().difficulty;
+    const prevConfig = get().practiceConfig;
     set({
       ...initialState,
       difficulty: prevDifficulty,
+      practiceConfig: prevConfig,
       status: 'playing',
       startTime: performance.now(),
     });
@@ -108,15 +135,27 @@ export const useGameStore = create<GameState>((set, get) => ({
   endGame: () => {
     const s = get();
     if (s.status === 'idle') return;
-    const duration = s.getElapsedSeconds();
+    const endTime = performance.now();
+    const duration = Math.floor(s.getSessionDurationSec());
+
     if (s.maxCombo > 0) {
       useStatsStore.getState().updateHighestCombo(s.maxCombo);
     }
-    useStatsStore.getState().recordSession(duration, s.correctCount, s.wrongCount);
+    if (duration > 0 || s.correctCount > 0 || s.wrongCount > 0) {
+      useStatsStore.getState().recordSession(duration, s.correctCount, s.wrongCount, s.practiceConfig.mode);
+    }
+    if (s.wrongDetails.length > 0) {
+      useStatsStore.getState().addWrongWords(
+        s.wrongDetails.map(w => ({ text: w.text, count: w.count, mode: s.practiceConfig.mode }))
+      );
+    }
+    setLastPracticeConfig(s.practiceConfig);
+
     set({
       status: s.lives <= 0 ? 'gameover' : 'idle',
       fallingItems: [],
-      startTime: null,
+      endTime,
+      sessionDuration: duration,
     });
   },
 
@@ -125,21 +164,52 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ difficulty: d });
   },
 
+  setPracticeConfig: (cfg: PracticeConfig) => {
+    if (get().status === 'playing' || get().status === 'paused') return;
+    set({ practiceConfig: cfg });
+    setLastPracticeConfig(cfg);
+  },
+
+  setPracticeMode: (mode: PracticeMode, customChars: string[] = []) => {
+    if (get().status === 'playing' || get().status === 'paused') return;
+    const cfg: PracticeConfig = {
+      mode,
+      customChars,
+      label: getModeLabel(mode),
+    };
+    set({ practiceConfig: cfg });
+    setLastPracticeConfig(cfg);
+  },
+
   spawnItem: (areaWidth: number) => {
     const s = get();
     if (s.status !== 'playing') return;
     const cfg = DIFFICULTY_CONFIG[s.difficulty];
-    const word = useWordStore.getState().getRandomWord(cfg.wordPool);
+
+    const wordStore = useWordStore.getState();
+    const statsStore = useStatsStore.getState();
+    const words = pickWordsForPractice(
+      s.practiceConfig,
+      s.practiceConfig.mode === 'digitRow' ? 'digits' : s.difficulty,
+      wordStore.library,
+      statsStore.wrongRecords
+    );
+
+    if (words.length === 0) return;
+    const word = words[Math.floor(Math.random() * words.length)];
+
     const minX = GAME_CONFIG.SPAWN_X_MIN;
     const maxX = Math.max(minX + 1, GAME_CONFIG.SPAWN_X_MAX);
     const xPct = minX + Math.random() * (maxX - minX);
+
+    const speedMultiplier = s.practiceConfig.mode === 'digitRow' ? 1 : 1;
     const item: FallingItem = {
       id: uid('fi'),
       text: word,
       typed: '',
       x: xPct,
       y: -5,
-      speed: cfg.baseSpeed * (0.9 + Math.random() * 0.3),
+      speed: cfg.baseSpeed * (0.9 + Math.random() * 0.3) * speedMultiplier,
       createdAt: performance.now(),
     };
     set({ fallingItems: [...s.fallingItems, item] });
@@ -150,30 +220,34 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (s.status !== 'playing') return;
     const bottomY = GAME_CONFIG.GAME_AREA_BOTTOM_PERCENT;
     const speedMultiplier = deltaMs / 16.67;
-    let lifeLost = 0;
+
+    const missedItems: FallingItem[] = [];
     const surviving: FallingItem[] = [];
+
     for (const item of s.fallingItems) {
       const newY = item.y + item.speed * speedMultiplier;
       if (newY >= bottomY) {
-        lifeLost += 1;
+        missedItems.push(item);
       } else {
         surviving.push({ ...item, y: newY });
       }
     }
-    if (lifeLost > 0) {
-      const newLives = Math.max(0, s.lives - lifeLost);
-      const nextState: Partial<GameState> = {
+
+    if (missedItems.length > 0) {
+      const newWrongDetails = recordWrongWords(s.wrongDetails, missedItems.map(i => i.text));
+      const newLives = Math.max(0, s.lives - missedItems.length);
+      const endNow = newLives <= 0;
+
+      set({
         fallingItems: surviving,
         lives: newLives,
         combo: 0,
-        wrongCount: s.wrongCount + lifeLost,
+        wrongCount: s.wrongCount + missedItems.length,
+        wrongDetails: newWrongDetails,
         screenFlash: { type: 'error', time: performance.now() },
-      };
-      if (newLives <= 0) {
-        nextState.status = 'gameover';
-      }
-      set(nextState);
-      if (newLives <= 0) {
+        status: endNow ? 'gameover' : s.status,
+      });
+      if (endNow) {
         get().endGame();
       }
     } else {
@@ -197,12 +271,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     const matchesCaseInsensitive = key.toLowerCase() === nextChar.toLowerCase();
 
     if (!matchesCaseSensitive && !matchesCaseInsensitive) {
+      const newWrongDetails = recordWrongWords(s.wrongDetails, [target.text]);
       const newLives = Math.max(0, s.lives - 1);
       const endNow = newLives <= 0;
       set({
         lives: newLives,
         combo: 0,
         wrongCount: s.wrongCount + 1,
+        wrongDetails: newWrongDetails,
         screenFlash: { type: 'error', time: performance.now() },
         status: endNow ? 'gameover' : s.status,
       });
@@ -283,9 +359,38 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   getElapsedSeconds: (): number => {
+    return get().getSessionDurationSec();
+  },
+
+  getSessionDurationSec: (): number => {
     const s = get();
     if (s.startTime == null) return 0;
+    if (s.sessionDuration > 0 && (s.status === 'gameover' || s.status === 'idle')) {
+      return s.sessionDuration;
+    }
     const endTime = s.status === 'paused' ? s.pausedTime : performance.now();
     return Math.max(0, Math.floor((endTime - s.startTime - s.totalPausedTime) / 1000));
   },
 }));
+
+function recordWrongWords(existing: WrongRecordLocal[], words: string[]): WrongRecordLocal[] {
+  const map = new Map<string, number>();
+  for (const r of existing) map.set(r.text, r.count);
+  for (const w of words) map.set(w, (map.get(w) ?? 0) + 1);
+  return Array.from(map.entries()).map(([text, count]) => ({ text, count }));
+}
+
+function getModeLabel(mode: PracticeMode): string {
+  const map: Record<PracticeMode, string> = {
+    all: '全键练习',
+    leftHand: '左手区',
+    rightHand: '右手区',
+    homeRow: '基准键位',
+    topRow: '上行键位',
+    bottomRow: '下行键位',
+    digitRow: '数字行',
+    custom: '自定义',
+    wrongWords: '错题专项',
+  };
+  return map[mode] ?? mode;
+}

@@ -1,6 +1,7 @@
 import { DEFAULT_WORD_LIBRARY } from './defaultWords';
-import { STORAGE_KEYS } from './constants';
-import type { WordLibrary, DailyStats } from '@/types';
+import { STORAGE_KEYS, GAME_CONFIG } from './constants';
+import type { WordLibrary, DailyStats, WrongRecord, PracticeConfig } from '@/types';
+import { DEFAULT_PRACTICE_CONFIG } from './constants';
 
 function safeGet<T>(key: string, fallback: T): T {
   try {
@@ -21,7 +22,13 @@ function safeSet<T>(key: string, value: T): void {
 }
 
 export function getWordLibrary(): WordLibrary {
-  return safeGet<WordLibrary>(STORAGE_KEYS.WORD_LIBRARY, DEFAULT_WORD_LIBRARY);
+  const stored = safeGet<Partial<WordLibrary>>(STORAGE_KEYS.WORD_LIBRARY, {} as Partial<WordLibrary>);
+  return {
+    easy: stored.easy ?? DEFAULT_WORD_LIBRARY.easy,
+    normal: stored.normal ?? DEFAULT_WORD_LIBRARY.normal,
+    hard: stored.hard ?? DEFAULT_WORD_LIBRARY.hard,
+    digits: stored.digits ?? DEFAULT_WORD_LIBRARY.digits,
+  };
 }
 
 export function setWordLibrary(library: WordLibrary): void {
@@ -49,7 +56,21 @@ function todayStr(): string {
   return `${y}-${m}-${day}`;
 }
 
-export function recordSession(durationSec: number, correct: number, wrong: number): void {
+function emptyModeStats() {
+  return {
+    duration: 0,
+    correctCount: 0,
+    wrongCount: 0,
+    sessions: 0,
+  };
+}
+
+export function recordSession(
+  durationSec: number,
+  correct: number,
+  wrong: number,
+  modeKey: string = 'all'
+): void {
   const all = getDailyStats();
   const today = todayStr();
   const accuracy = correct + wrong > 0 ? correct / (correct + wrong) : 0;
@@ -63,11 +84,28 @@ export function recordSession(durationSec: number, correct: number, wrong: numbe
       wrongCount: wrong,
       accuracy,
       sessions: 1,
+      byMode: {
+        [modeKey]: {
+          duration: durationSec,
+          correctCount: correct,
+          wrongCount: wrong,
+          sessions: 1,
+        },
+      },
     });
   } else {
     const existing = all[idx];
     const newCorrect = existing.correctCount + correct;
     const newWrong = existing.wrongCount + wrong;
+    const byMode = { ...(existing.byMode ?? {}) };
+    const prev = byMode[modeKey] ?? emptyModeStats();
+    byMode[modeKey] = {
+      duration: prev.duration + durationSec,
+      correctCount: prev.correctCount + correct,
+      wrongCount: prev.wrongCount + wrong,
+      sessions: prev.sessions + 1,
+    };
+
     all[idx] = {
       date: today,
       totalDuration: existing.totalDuration + durationSec,
@@ -75,6 +113,7 @@ export function recordSession(durationSec: number, correct: number, wrong: numbe
       wrongCount: newWrong,
       accuracy: newCorrect + newWrong > 0 ? newCorrect / (newCorrect + newWrong) : 0,
       sessions: existing.sessions + 1,
+      byMode,
     };
   }
 
@@ -116,8 +155,55 @@ export function getLastNDaysStats(n: number): DailyStats[] {
         wrongCount: 0,
         accuracy: 0,
         sessions: 0,
+        byMode: {},
       });
     }
   }
   return result;
+}
+
+export function getWrongRecords(): WrongRecord[] {
+  return safeGet<WrongRecord[]>(STORAGE_KEYS.WRONG_RECORDS, []);
+}
+
+export function addWrongRecords(
+  items: { text: string; mode?: string }[]
+): WrongRecord[] {
+  const all = getWrongRecords();
+  const now = Date.now();
+  const modeKey = items[0]?.mode ?? 'all';
+
+  for (const item of items) {
+    const text = item.text;
+    const idx = all.findIndex(r => r.text === text);
+    if (idx === -1) {
+      all.push({
+        text,
+        count: 1,
+        lastSeen: now,
+        mode: modeKey,
+      });
+    } else {
+      all[idx].count += 1;
+      all[idx].lastSeen = now;
+      all[idx].mode = modeKey;
+    }
+  }
+
+  const sorted = all.sort((a, b) => b.count - a.count || b.lastSeen - a.lastSeen);
+  const trimmed = sorted.slice(0, GAME_CONFIG.MAX_WRONG_RECORDS);
+  safeSet(STORAGE_KEYS.WRONG_RECORDS, trimmed);
+  return trimmed;
+}
+
+export function clearWrongRecords(): void {
+  localStorage.removeItem(STORAGE_KEYS.WRONG_RECORDS);
+}
+
+export function getLastPracticeConfig(): PracticeConfig {
+  return safeGet<PracticeConfig>(STORAGE_KEYS.LAST_PRACTICE_CONFIG, DEFAULT_PRACTICE_CONFIG);
+}
+
+export function setLastPracticeConfig(config: PracticeConfig): void {
+  safeSet(STORAGE_KEYS.LAST_PRACTICE_CONFIG, config);
 }

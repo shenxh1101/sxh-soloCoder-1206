@@ -35,10 +35,11 @@ export function Modal({ open, onClose, title, children, accentColor = 'purple' }
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={onClose} data-modal-open="true">
       <div
         className={`modal-content ${borderMap[accentColor]}`}
         onClick={e => e.stopPropagation()}
+        data-modal-open="true"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/50 bg-slate-800/40">
           <h2 className={`font-display font-bold text-xl ${titleMap[accentColor]}`}>
