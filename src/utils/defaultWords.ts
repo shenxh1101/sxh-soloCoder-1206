@@ -1,0 +1,42 @@
+import type { WordLibrary } from '@/types';
+
+export const DEFAULT_WORD_LIBRARY: WordLibrary = {
+  easy: [
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+    'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+  ],
+  normal: [
+    'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her',
+    'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how',
+    'its', 'let', 'may', 'new', 'now', 'old', 'see', 'two', 'way', 'who',
+    'boy', 'did', 'own', 'say', 'she', 'too', 'use', 'cat', 'dog', 'run',
+    'sun', 'hat', 'map', 'red', 'big', 'box', 'cup', 'pen', 'yes', 'top',
+    'code', 'data', 'file', 'list', 'loop', 'node', 'port', 'type', 'user',
+    'void', 'word', 'byte', 'char', 'flag', 'line', 'name', 'null', 'push',
+    'root', 'sort', 'text', 'tree', 'view', 'async', 'await', 'break',
+    'catch', 'class', 'const', 'false', 'final', 'index', 'input', 'inner',
+    'keyup', 'logic', 'mount', 'outer', 'print', 'query', 'range', 'state',
+    'throw', 'truth', 'value', 'while', 'write', 'yield',
+  ],
+  hard: [
+    'abstract', 'advanced', 'algorithm', 'argument', 'boolean', 'callback',
+    'children', 'chaining', 'closure', 'compiler', 'constant', 'continue',
+    'database', 'debugger', 'decorator', 'defaults', 'delegate', 'document',
+    'elements', 'elsewhere', 'encoding', 'enqueued', 'iterator', 'function',
+    'generate', 'generics', 'keyboard', 'language', 'markdown', 'metadata',
+    'microsoft', 'modifier', 'modules', 'multiple', 'navigate', 'negative',
+    'operator', 'optional', 'overflow', 'packages', 'parallel', 'parameter',
+    'platform', 'positive', 'practice', 'previous', 'primitive', 'private',
+    'prototype', 'public', 'readonly', 'recursion', 'reducers', 'rejected',
+    'relative', 'renderer', 'requires', 'resolved', 'response', 'restrict',
+    'selector', 'sequence', 'settings', 'shadowing', 'software', 'solution',
+    'statement', 'static', 'strategy', 'strictly', 'structure', 'subclass',
+    'template', 'terminal', 'thisArg', 'toString', 'training', 'transfer',
+    'tryCatch', 'typesafe', 'unsigned', 'updating', 'validate', 'variable',
+    'velocity', 'voidable', 'weekday', 'yourself', 'keyboard', 'practice',
+    'computer', 'keyboard', 'developer', 'framework', 'interface', 'component',
+  ],
+};

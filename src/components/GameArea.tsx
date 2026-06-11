@@ -1,0 +1,181 @@
+import { useRef } from 'react';
+import { useGameStore } from '@/stores/useGameStore';
+import { GAME_CONFIG } from '@/utils/constants';
+import { useGameLoop } from '@/hooks/useGameLoop';
+import { useKeyboard } from '@/hooks/useKeyboard';
+import { FallingItem } from './FallingItem';
+
+interface Props {
+  onVirtualKey?: (key: string) => void;
+}
+
+export function GameArea(_props: Props) {
+  const areaRef = useRef<HTMLDivElement>(null);
+  useGameLoop(areaRef);
+  useKeyboard(areaRef);
+
+  const items = useGameStore(s => s.fallingItems);
+  const floatingScores = useGameStore(s => s.floatingScores);
+  const screenFlash = useGameStore(s => s.screenFlash);
+  const status = useGameStore(s => s.status);
+  const combo = useGameStore(s => s.combo);
+
+  const sortedByY = [...items].sort((a, b) => b.y - a.y);
+  const activeId = sortedByY[0]?.id ?? null;
+
+  const milestoneLabels: Record<number, string> = {
+    10: '十连击！',
+    25: '二十五连击！',
+    50: '超级连击！',
+    100: '完美表现！',
+    200: '传奇！',
+  };
+
+  return (
+    <div
+      ref={areaRef}
+      className="relative flex-1 w-full overflow-hidden game-grid-bg"
+      style={{ minHeight: 0 }}
+    >
+      <div
+        className="absolute left-0 right-0 h-1 bg-neon-red/30"
+        style={{
+          top: `${GAME_CONFIG.GAME_AREA_BOTTOM_PERCENT}%`,
+          boxShadow: '0 0 12px rgba(248, 113, 113, 0.4)',
+        }}
+      />
+      <div
+        className="absolute left-4 text-xs text-neon-red/50 font-mono"
+        style={{ top: `calc(${GAME_CONFIG.GAME_AREA_BOTTOM_PERCENT}% - 18px)` }}
+      >
+        ── 警戒线 ──
+      </div>
+
+      {items.map(item => (
+        <FallingItem
+          key={item.id}
+          item={item}
+          isActive={item.id === activeId}
+        />
+      ))}
+
+      {floatingScores.map(fs => (
+        <div
+          key={fs.id}
+          className="absolute font-mono font-bold text-neon-yellow pointer-events-none animate-float-up"
+          style={{
+            left: `${fs.x}%`,
+            top: `${fs.y}%`,
+            transform: 'translate(-50%, -50%)',
+            textShadow: '0 0 10px #facc15, 0 0 20px #facc15',
+            fontSize: '18px',
+          }}
+        >
+          +{fs.value}
+        </div>
+      ))}
+
+      {screenFlash.type === 'error' && (
+        <div
+          key={screenFlash.time}
+          className="absolute inset-0 bg-neon-red/20 pointer-events-none animate-flash"
+        />
+      )}
+      {screenFlash.type === 'milestone' && (
+        <div
+          key={screenFlash.time}
+          className="absolute inset-0 bg-neon-cyan/30 pointer-events-none animate-flash flex items-center justify-center"
+        >
+          <div className="text-6xl font-black font-display text-white animate-bounce falling-text-glow">
+            🔥 {milestoneLabels[combo] ?? `${combo} COMBO!`} 🔥
+          </div>
+        </div>
+      )}
+
+      {status === 'idle' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-bg-darker/60 backdrop-blur-sm">
+          <h1 className="font-display text-6xl md:text-7xl font-black mb-4 bg-gradient-to-r from-neon-cyan via-neon-purple to-neon-pink bg-clip-text text-transparent">
+            ⌨️ TYPING RUSH
+          </h1>
+          <p className="text-slate-300 text-lg mb-2">键盘指法练习 · 挑战你的极限</p>
+          <p className="text-slate-500 text-sm mb-8">按 <kbd className="px-2 py-0.5 bg-slate-800 rounded border border-slate-600 text-neon-cyan font-mono">空格</kbd> 或点击下方按钮开始</p>
+          <div className="text-slate-400 text-sm max-w-md text-center">
+            <p>🎯 敲对字母/单词得分 · ❌ 敲错或超时扣血</p>
+            <p className="mt-1">🔥 保持连击获得额外加成</p>
+          </div>
+        </div>
+      )}
+
+      {status === 'paused' && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 bg-bg-darker/70 backdrop-blur-sm">
+          <div className="text-center">
+            <div className="font-display text-7xl font-black text-neon-yellow mb-4 animate-pulse">
+              ⏸ 暂停
+            </div>
+            <p className="text-slate-300">按 <kbd className="px-2 py-0.5 bg-slate-800 rounded border border-slate-600 text-neon-cyan font-mono">ESC</kbd> 继续</p>
+          </div>
+        </div>
+      )}
+
+      {status === 'gameover' && (
+        <GameOverOverlay />
+      )}
+    </div>
+  );
+}
+
+function GameOverOverlay() {
+  const score = useGameStore(s => s.score);
+  const maxCombo = useGameStore(s => s.maxCombo);
+  const correct = useGameStore(s => s.correctCount);
+  const wrong = useGameStore(s => s.wrongCount);
+  const elapsed = useGameStore(s => s.getElapsedSeconds());
+  const restart = useGameStore(s => s.restartGame);
+
+  const total = correct + wrong;
+  const acc = total > 0 ? Math.round((correct / total) * 100) : 0;
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center z-20 bg-bg-darker/80 backdrop-blur-sm">
+      <div className="bg-slate-900/95 border-2 border-neon-purple rounded-3xl p-10 max-w-md w-full mx-4 shadow-neon-purple text-center">
+        <div className="font-display text-5xl font-black mb-2 bg-gradient-to-r from-neon-red to-neon-pink bg-clip-text text-transparent">
+          💥 游戏结束
+        </div>
+        <p className="text-slate-400 mb-6">生命耗尽！再接再厉！</p>
+
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="bg-slate-800/60 rounded-xl p-4 border border-neon-yellow/30">
+            <div className="text-xs text-neon-yellow/70 mb-1">最终分数</div>
+            <div className="text-3xl font-bold text-neon-yellow font-mono">
+              {score.toLocaleString()}
+            </div>
+          </div>
+          <div className="bg-slate-800/60 rounded-xl p-4 border border-neon-green/30">
+            <div className="text-xs text-neon-green/70 mb-1">最高连击</div>
+            <div className="text-3xl font-bold text-neon-green font-mono">
+              {maxCombo}
+            </div>
+          </div>
+          <div className="bg-slate-800/60 rounded-xl p-4 border border-neon-cyan/30">
+            <div className="text-xs text-neon-cyan/70 mb-1">正确率</div>
+            <div className="text-2xl font-bold text-neon-cyan font-mono">
+              {acc}%
+            </div>
+          </div>
+          <div className="bg-slate-800/60 rounded-xl p-4 border border-neon-purple/30">
+            <div className="text-xs text-neon-purple/70 mb-1">用时</div>
+            <div className="text-2xl font-bold text-neon-purple font-mono">
+              {mins}:{secs.toString().padStart(2, '0')}
+            </div>
+          </div>
+        </div>
+
+        <button onClick={restart} className="btn-purple w-full text-lg">
+          🔄 再来一局
+        </button>
+      </div>
+    </div>
+  );
+}
