@@ -90,7 +90,7 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
       pool.sort((a, b) => b.lastSeen - a.lastSeen);
     } else if (wrongSort === 'currentMode') {
       const filtered = pool.filter(r => r.mode === practiceMode);
-      pool = filtered.length > 0 ? filtered : pool;
+      pool = filtered;
       pool.sort((a, b) => b.count - a.count);
     }
     return pool.slice(0, 15);
@@ -104,10 +104,17 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
       pool.sort((a, b) => b.lastSeen - a.lastSeen);
     } else if (wrongSort === 'currentMode') {
       const filtered = pool.filter(r => r.mode === practiceMode);
-      pool = filtered.length > 0 ? filtered : pool;
+      pool = filtered;
       pool.sort((a, b) => b.count - a.count);
     }
     return pool;
+  }, [wrongRecords, wrongSort, practiceMode]);
+
+  const filteredWrongCount = useMemo(() => {
+    if (wrongSort === 'currentMode') {
+      return wrongRecords.filter(r => r.mode === practiceMode).length;
+    }
+    return wrongRecords.length;
   }, [wrongRecords, wrongSort, practiceMode]);
 
   const modeStats = useMemo(() => {
@@ -148,6 +155,7 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
 
   const handleStartWrongPractice = () => {
     if (wrongRecords.length === 0) return;
+    if (wrongSort === 'currentMode' && filteredWrongCount === 0) return;
     const canStart = status === 'idle' || status === 'gameover';
     if (!canStart) {
       alert('请先结束当前游戏');
@@ -430,13 +438,19 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
                 <p className="text-slate-400">太棒了！没有错题记录</p>
                 <p className="text-sm mt-1 opacity-70">继续保持，争取零失误 🌟</p>
               </div>
+            ) : wrongSort === 'currentMode' && filteredWrongCount === 0 ? (
+              <div className="text-center py-16 text-slate-500">
+                <BookX size={40} className="mx-auto mb-3 opacity-40 text-neon-cyan" />
+                <p className="text-slate-400">当前模式「{getPracticeModeLabel(practiceMode)}」没有错题</p>
+                <p className="text-sm mt-1 opacity-70">切换到「最高频」或「最近」查看全部错题</p>
+              </div>
             ) : (
               <>
                 <div className="bg-slate-900/50 border border-slate-700/50 rounded-2xl p-5">
                   <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-4">
                     <div className="bg-neon-red/10 border border-neon-red/30 rounded-xl p-3 text-center">
                       <div className="text-2xl font-bold font-mono text-neon-red">
-                        {wrongRecords.length}
+                        {filteredWrongCount}
                       </div>
                       <div className="text-xs text-slate-400 mt-1">错题种类</div>
                     </div>
@@ -516,7 +530,7 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
                   <button
                     onClick={handleStartWrongPractice}
                     className="btn-pink w-full"
-                    disabled={wrongRecords.length === 0 || status === 'playing' || status === 'paused'}
+                    disabled={filteredWrongCount === 0 || status === 'playing' || status === 'paused'}
                   >
                     <Play size={16} className="inline mr-2" />
                     开始错题专项练习

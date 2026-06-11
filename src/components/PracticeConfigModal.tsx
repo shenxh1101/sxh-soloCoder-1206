@@ -2,8 +2,8 @@ import { useState, useMemo } from 'react';
 import { Modal } from './Modal';
 import { useGameStore } from '@/stores/useGameStore';
 import { useStatsStore } from '@/stores/useStatsStore';
-import { PRACTICE_MODES } from '@/types';
-import type { PracticeMode, GoalType, PracticeGoal } from '@/types';
+import { PRACTICE_MODES, TRAINING_PLANS } from '@/types';
+import type { PracticeMode, GoalType, PracticeGoal, TrainingPlan } from '@/types';
 import {
   Settings2,
   ChevronRight,
@@ -13,6 +13,7 @@ import {
   Clock,
   Flame,
   Gauge,
+  Zap,
 } from 'lucide-react';
 
 interface Props {
@@ -53,6 +54,19 @@ export function PracticeConfigModal({ open, onClose }: Props) {
   const [goalValue, setGoalValue] = useState<number>(currentGoal?.value ?? 180);
   const [customGoalInput, setCustomGoalInput] = useState<string>('');
 
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+
+  const handleSelectPlan = (plan: TrainingPlan) => {
+    setSelectedPlan(plan.id);
+    setSelectedMode(plan.mode);
+    if (plan.customChars) setCustomInput(plan.customChars.join(''));
+    setGoalType(plan.goal.type);
+    setGoalValue(plan.goal.value);
+    if (plan.wrongSort) {
+      // wrongSort is for internal use, not directly shown here
+    }
+  };
+
   const canChange = status === 'idle' || status === 'gameover';
 
   const handleConfirm = () => {
@@ -64,14 +78,15 @@ export function PracticeConfigModal({ open, onClose }: Props) {
       ? { type: goalType, value: goalValue }
       : null;
 
-    const prevCfg = useGameStore.getState().practiceConfig;
+    const plan = selectedPlan ? TRAINING_PLANS.find(p => p.id === selectedPlan) : null;
+
     setPracticeConfig({
       mode: selectedMode,
       customChars: chars,
       label: getPracticeModeLabel(selectedMode),
       goal,
-      wrongSort: prevCfg.wrongSort ?? 'count',
-      wrongLimit: prevCfg.wrongLimit ?? 50,
+      wrongSort: plan?.wrongSort ?? 'count',
+      wrongLimit: plan?.wrongLimit ?? 50,
     });
     onClose();
   };
@@ -113,6 +128,51 @@ export function PracticeConfigModal({ open, onClose }: Props) {
             </div>
           </div>
         )}
+
+        <div>
+          <div className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+            <Zap size={16} className="text-neon-yellow" />
+            训练计划
+            <span className="text-xs text-slate-500 font-normal ml-1">快速开始</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {TRAINING_PLANS.map(plan => {
+              const isSelected = selectedPlan === plan.id;
+              const isWrongPlan = plan.mode === 'wrongWords' && wrongCount === 0;
+              return (
+                <button
+                  key={plan.id}
+                  onClick={() => {
+                    if (isWrongPlan) return;
+                    handleSelectPlan(plan);
+                  }}
+                  disabled={!canChange || isWrongPlan}
+                  className={`text-left p-3 rounded-xl border transition-all ${
+                    isSelected
+                      ? 'border-neon-yellow bg-neon-yellow/10 shadow-[0_0_10px_rgba(250,204,21,0.15)]'
+                      : 'border-slate-700/50 bg-slate-800/40 hover:border-slate-600'
+                  } ${!canChange || isWrongPlan ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-bold text-slate-100">{plan.name}</span>
+                    {isSelected && <Check size={14} className="text-neon-yellow" />}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {getPracticeModeLabel(plan.mode)}
+                    {plan.goal && (
+                      <span className="text-slate-400 ml-1">
+                        · {plan.goal.type === 'duration' ? `${plan.goal.value}秒` : plan.goal.type === 'correctCount' ? `${plan.goal.value}次` : `${plan.goal.value}%`}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-slate-600 mt-2">
+            选择计划后自动配置模式与目标，也可在下方手动调整
+          </p>
+        </div>
 
         <div>
           <div className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">

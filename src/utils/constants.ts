@@ -127,7 +127,7 @@ export function pickWordsForPractice(
       if (config.customChars.length === 0) return basePool;
       return filterWordsByCustomSet(basePool, config.customChars);
     case 'wrongWords': {
-      if (wrongRecords.length === 0) return basePool;
+      if (wrongRecords.length === 0) return [];
       let pool = [...wrongRecords];
       const sort = config.wrongSort ?? 'count';
       const limit = config.wrongLimit ?? 50;
@@ -136,12 +136,13 @@ export function pickWordsForPractice(
       } else if (sort === 'recent') {
         pool.sort((a, b) => b.lastSeen - a.lastSeen);
       } else if (sort === 'mode') {
-        const curMode = config.mode;
-        pool = pool.filter(r => r.mode === curMode);
-        if (pool.length === 0) pool = [...wrongRecords].sort((a, b) => b.count - a.count);
+        const filtered = pool.filter(r => r.mode === config.mode);
+        if (filtered.length === 0) return [];
+        pool = filtered;
+        pool.sort((a, b) => b.count - a.count);
       }
       const texts = [...new Set(pool.slice(0, limit).map(r => r.text))];
-      return texts.length > 0 ? texts : basePool;
+      return texts;
     }
     default:
       return basePool;

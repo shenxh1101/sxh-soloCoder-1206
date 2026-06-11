@@ -131,11 +131,13 @@ function GameOverOverlay() {
   const maxCombo = useGameStore(s => s.maxCombo);
   const correct = useGameStore(s => s.correctCount);
   const wrong = useGameStore(s => s.wrongCount);
+  const lives = useGameStore(s => s.lives);
   const durationSec = useGameStore(s => s.getSessionDurationSec());
   const wrongDetails = useGameStore(s => s.wrongDetails);
   const practiceMode = useGameStore(s => s.practiceConfig.mode);
   const wrongReview = useGameStore(s => s.wrongReviewSummary);
   const goalResult = useGameStore(s => s.goalResult);
+  const practiceGoal = useGameStore(s => s.practiceConfig.goal);
   const restart = useGameStore(s => s.restartGame);
 
   const total = correct + wrong;
@@ -158,17 +160,27 @@ function GameOverOverlay() {
   };
 
   const isWrongReviewMode = practiceMode === 'wrongWords' && wrongReview;
+  const isGoalReached = goalResult?.reached;
+  const endedByLives = lives <= 0;
+  const endedByGoal = goalResult != null && isGoalReached;
+
+  const titleText = endedByGoal ? '🎯 目标达成！' : '💥 游戏结束';
+  const subtitleText = endedByGoal
+    ? `${getPracticeModeLabel(practiceMode)} · 目标挑战完成`
+    : `${getPracticeModeLabel(practiceMode)} · 生命耗尽`;
 
   return (
     <div className="absolute inset-0 flex items-center justify-center z-20 bg-bg-darker/80 backdrop-blur-sm overflow-auto scrollbar-thin">
       <div className="bg-slate-900/95 border-2 border-neon-purple rounded-3xl p-8 max-w-lg w-full mx-4 my-6 shadow-neon-purple">
         <div className="text-center mb-6">
-          <div className="font-display text-4xl font-black mb-1 bg-gradient-to-r from-neon-red to-neon-pink bg-clip-text text-transparent">
-            💥 游戏结束
+          <div className={`font-display text-4xl font-black mb-1 ${
+            endedByGoal
+              ? 'bg-gradient-to-r from-neon-green to-neon-cyan bg-clip-text text-transparent'
+              : 'bg-gradient-to-r from-neon-red to-neon-pink bg-clip-text text-transparent'
+          }`}>
+            {titleText}
           </div>
-          <p className="text-slate-400 text-sm">
-            {getPracticeModeLabel(practiceMode)} · 生命耗尽
-          </p>
+          <p className="text-slate-400 text-sm">{subtitleText}</p>
         </div>
 
         {goalResult && (
@@ -187,10 +199,21 @@ function GameOverOverlay() {
               <span>{goalLabel[goalResult.type]}</span>
               <span className="font-mono">
                 <span className={goalResult.reached ? 'text-neon-green' : 'text-neon-yellow'}>
-                  {goalResult.actual}
+                  {goalResult.actual}{goalUnit[goalResult.type]}
                 </span>
-                <span className="text-slate-500"> / {goalResult.target}{goalUnit[goalResult.type]}</span>
+                <span className="text-slate-500"> / 目标 {goalResult.target}{goalUnit[goalResult.type]}</span>
               </span>
+            </div>
+            <div className="mt-2">
+              {goalResult.reached ? (
+                <span className="text-xs text-neon-green/80">
+                  ✓ 超出目标 <span className="font-mono">{goalResult.actual - goalResult.target}</span> {goalUnit[goalResult.type]}
+                </span>
+              ) : (
+                <span className="text-xs text-neon-yellow/80">
+                  还差 <span className="font-mono">{goalResult.target - goalResult.actual}</span> {goalUnit[goalResult.type]}
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -242,7 +265,7 @@ function GameOverOverlay() {
             <div className="flex items-center gap-2 text-sm font-semibold text-neon-pink">
               📝 专项复习小结
               <span className="text-xs text-slate-500 font-normal ml-auto">
-                共复习 {wrongReview.reviewed.length} 个
+                共 {wrongReview.reviewed.length} 个
               </span>
             </div>
             {wrongReview.mastered.length > 0 && (
@@ -273,9 +296,18 @@ function GameOverOverlay() {
                 </div>
               </div>
             )}
-            {wrongReview.mastered.length === 0 && wrongReview.stillWrong.length === 0 && (
-              <div className="text-xs text-slate-500">
-                本局未对复习内容产生命中，建议延长练习时间
+            {wrongReview.notReached.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1 text-xs text-slate-400 mb-1.5">
+                  <span>⏳ 未练到 ({wrongReview.notReached.length})</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {wrongReview.notReached.map((t, i) => (
+                    <span key={i} className="px-2 py-0.5 rounded bg-slate-700/40 border border-slate-600/40 text-slate-400 text-xs font-mono">
+                      {t}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -304,6 +336,11 @@ function GameOverOverlay() {
           </div>
         )}
 
+        {practiceGoal && (
+          <p className="text-xs text-slate-500 text-center mb-3">
+            💡 点击「再来一局」将沿用当前目标配置
+          </p>
+        )}
         <button onClick={restart} className="btn-purple w-full text-lg">
           🔄 再来一局
         </button>

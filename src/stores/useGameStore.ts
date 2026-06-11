@@ -115,6 +115,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       wordStore.library,
       stats.wrongRecords
     );
+    if (initialWords.length === 0 && prevConfig.mode === 'wrongWords') {
+      return;
+    }
     set({
       ...initialState,
       difficulty: prevDifficulty,
@@ -170,31 +173,39 @@ export const useGameStore = create<GameState>((set, get) => ({
       useStatsStore.getState().recordSession(duration, s.correctCount, s.wrongCount, s.practiceConfig.mode);
     }
 
-    // --- 错题专项练习小结 + 更新错题次数 ---
     let wrongReview: WrongReviewSummary | null = null;
     if (s.practiceConfig.mode === 'wrongWords' && s.sessionInitialWrongWords.length > 0) {
       const initialSet = new Set(s.sessionInitialWrongWords);
+
       const stillWrongMap = new Map<string, number>();
       for (const wd of s.wrongDetails) {
         if (initialSet.has(wd.text)) {
           stillWrongMap.set(wd.text, wd.count);
         }
       }
-      const stillWrongArr = Array.from(stillWrongMap.entries())
-        .map(([text, count]) => ({ text, count }))
-        .sort((a, b) => b.count - a.count);
 
-      const masteredArr = s.sessionInitialWrongWords.filter(
-        w => !stillWrongMap.has(w) && s.sessionCorrectWords.has(w)
-      );
+      const masteredArr: string[] = [];
+      const stillWrongArr: { text: string; count: number }[] = [];
+      const notReachedArr: string[] = [];
+
+      for (const w of s.sessionInitialWrongWords) {
+        if (stillWrongMap.has(w)) {
+          stillWrongArr.push({ text: w, count: stillWrongMap.get(w)! });
+        } else if (s.sessionCorrectWords.has(w)) {
+          masteredArr.push(w);
+        } else {
+          notReachedArr.push(w);
+        }
+      }
+      stillWrongArr.sort((a, b) => b.count - a.count);
 
       wrongReview = {
         reviewed: s.sessionInitialWrongWords,
         mastered: masteredArr,
         stillWrong: stillWrongArr,
+        notReached: notReachedArr,
       };
 
-      // 更新错题：掌握了的-1，错了的+1
       useStatsStore.getState().applyWrongReview(masteredArr, stillWrongArr);
     } else if (s.wrongDetails.length > 0) {
       useStatsStore.getState().addWrongWords(
@@ -202,7 +213,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       );
     }
 
-    // --- 目标达成检测 ---
     let goalResult: GoalResult | null = null;
     const goal = s.practiceConfig.goal;
     if (goal) {
@@ -225,8 +235,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     setLastPracticeConfig(s.practiceConfig);
 
+    const hasGoal = !!s.practiceConfig.goal;
     set({
-      status: s.lives <= 0 ? 'gameover' : 'idle',
+      status: 'gameover',
       fallingItems: [],
       endTime: now,
       sessionDuration: duration,
@@ -234,6 +245,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       pausedTime: 0,
       wrongReviewSummary: wrongReview,
       goalResult,
+      lives: s.lives <= 0 ? 0 : s.lives,
     });
   },
 

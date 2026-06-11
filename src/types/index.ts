@@ -42,7 +42,75 @@ export interface WrongReviewSummary {
   reviewed: string[];
   mastered: string[];
   stillWrong: { text: string; count: number }[];
+  notReached: string[];
 }
+
+export interface TrainingPlan {
+  id: string;
+  name: string;
+  mode: PracticeMode;
+  goal: PracticeGoal;
+  wrongLimit?: number;
+  wrongSort?: WrongSort;
+  customChars?: string[];
+}
+
+export const TRAINING_PLANS: TrainingPlan[] = [
+  {
+    id: 'wrong_top10_3min',
+    name: '3分钟 · 前10错题',
+    mode: 'wrongWords',
+    goal: { type: 'duration', value: 180 },
+    wrongLimit: 10,
+    wrongSort: 'count',
+  },
+  {
+    id: 'wrong_top30_5min',
+    name: '5分钟 · 前30错题',
+    mode: 'wrongWords',
+    goal: { type: 'duration', value: 300 },
+    wrongLimit: 30,
+    wrongSort: 'count',
+  },
+  {
+    id: 'digit_50hits',
+    name: '命中50次 · 数字行',
+    mode: 'digitRow',
+    goal: { type: 'correctCount', value: 50 },
+  },
+  {
+    id: 'left_3min',
+    name: '3分钟 · 左手区',
+    mode: 'leftHand',
+    goal: { type: 'duration', value: 180 },
+  },
+  {
+    id: 'right_3min',
+    name: '3分钟 · 右手区',
+    mode: 'rightHand',
+    goal: { type: 'duration', value: 180 },
+  },
+  {
+    id: 'home_accuracy95',
+    name: '正确率95% · 基准键',
+    mode: 'homeRow',
+    goal: { type: 'accuracy', value: 95 },
+  },
+  {
+    id: 'all_5min',
+    name: '5分钟 · 全键练习',
+    mode: 'all',
+    goal: { type: 'duration', value: 300 },
+  },
+  {
+    id: 'wrong_all_accuracy90',
+    name: '正确率90% · 全部错题',
+    mode: 'wrongWords',
+    goal: { type: 'accuracy', value: 90 },
+    wrongLimit: 9999,
+    wrongSort: 'count',
+  },
+];
 
 export interface FallingItem {
   id: string;
