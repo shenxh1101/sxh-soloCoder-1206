@@ -63,6 +63,7 @@ export const useStatsStore = create<StatsState>((set, get) => ({
     if (words.length === 0) return;
     const items = words.map(w => ({
       text: w.text,
+      count: w.count ?? 1,
       mode: w.mode ?? 'all',
     }));
     const updated = addWrongRecords(items);

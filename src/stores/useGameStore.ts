@@ -135,8 +135,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   endGame: () => {
     const s = get();
     if (s.status === 'idle') return;
-    const endTime = performance.now();
-    const duration = Math.floor(s.getSessionDurationSec());
+    const now = performance.now();
+    let pausedDelta = s.totalPausedTime;
+    if (s.status === 'paused' && s.pausedTime > 0) {
+      pausedDelta += (now - s.pausedTime);
+    }
+    const rawDuration = s.startTime != null
+      ? Math.max(0, (now - s.startTime - pausedDelta) / 1000)
+      : 0;
+    const duration = Math.floor(rawDuration);
 
     if (s.maxCombo > 0) {
       useStatsStore.getState().updateHighestCombo(s.maxCombo);
@@ -154,8 +161,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       status: s.lives <= 0 ? 'gameover' : 'idle',
       fallingItems: [],
-      endTime,
+      endTime: now,
       sessionDuration: duration,
+      totalPausedTime: pausedDelta,
+      pausedTime: 0,
     });
   },
 
@@ -365,11 +374,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   getSessionDurationSec: (): number => {
     const s = get();
     if (s.startTime == null) return 0;
-    if (s.sessionDuration > 0 && (s.status === 'gameover' || s.status === 'idle')) {
+    if (s.status === 'gameover' || s.status === 'idle') {
       return s.sessionDuration;
     }
-    const endTime = s.status === 'paused' ? s.pausedTime : performance.now();
-    return Math.max(0, Math.floor((endTime - s.startTime - s.totalPausedTime) / 1000));
+    const now = s.status === 'paused' ? s.pausedTime : performance.now();
+    return Math.max(0, Math.floor((now - s.startTime - s.totalPausedTime) / 1000));
   },
 }));
 

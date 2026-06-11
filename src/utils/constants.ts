@@ -125,7 +125,8 @@ export function pickWordsForPractice(
       return filterWordsByCustomSet(basePool, config.customChars);
     case 'wrongWords': {
       if (wrongRecords.length === 0) return basePool;
-      return wrongRecords.slice(0, 50).map(r => r.text);
+      const texts = [...new Set(wrongRecords.slice(0, 50).map(r => r.text))];
+      return texts.length > 0 ? texts : basePool;
     }
     default:
       return basePool;

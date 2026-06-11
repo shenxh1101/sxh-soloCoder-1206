@@ -104,14 +104,14 @@ export function StatsPanel({ open, onClose, onStartPractice }: Props) {
 
   const fmtDuration = (secs: number) => {
     const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60;
+    const m = Math.floor((secs % 3600) / 60);
     if (h > 0) return `${h}h ${Math.round(m)}m`;
     return `${Math.round(m)} 分钟`;
   };
 
   const fmtDurationSec = (secs: number) => {
     const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60;
+    const m = Math.floor((secs % 3600) / 60);
     if (h > 0) return `${h}h ${Math.round(m)}m`;
     return `${Math.round(m)} 分钟`;
   };

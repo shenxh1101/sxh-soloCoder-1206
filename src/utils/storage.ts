@@ -167,7 +167,7 @@ export function getWrongRecords(): WrongRecord[] {
 }
 
 export function addWrongRecords(
-  items: { text: string; mode?: string }[]
+  items: { text: string; count?: number; mode?: string }[]
 ): WrongRecord[] {
   const all = getWrongRecords();
   const now = Date.now();
@@ -175,16 +175,17 @@ export function addWrongRecords(
 
   for (const item of items) {
     const text = item.text;
+    const addCount = item.count ?? 1;
     const idx = all.findIndex(r => r.text === text);
     if (idx === -1) {
       all.push({
         text,
-        count: 1,
+        count: addCount,
         lastSeen: now,
         mode: modeKey,
       });
     } else {
-      all[idx].count += 1;
+      all[idx].count += addCount;
       all[idx].lastSeen = now;
       all[idx].mode = modeKey;
     }
